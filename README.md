@@ -1,5 +1,6 @@
 TS3Plugin API
 =============
+The documentation can be found [here on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
 
 Usage
 -----
