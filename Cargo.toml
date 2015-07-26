@@ -1,0 +1,13 @@
+[package]
+name = "ts3plugin"
+version = "0.1.0"
+authors = ["Flakebi <flakebi@t-online.de>"]
+
+[lib]
+name = "ts3plugin"
+
+[dependencies]
+libc = "*"
+
+[dependencies.ts3plugin_sys]
+git = "https://github.com/Flakebi/rust-ts3plugin-sys"
