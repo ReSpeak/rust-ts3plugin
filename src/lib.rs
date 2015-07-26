@@ -22,6 +22,41 @@ pub enum InitResult
     FailureNoMessage
 }
 
+/// The trait that has to be implemented by a plugin. To enhance a library to a
+/// working TeamSpeak plugin you have to call the macro `create_plugin!`
+/// afterwards.
+///
+/// # Examples
+///
+/// A fully working example that creates a plugin that does nothing:
+///
+/// ```
+/// #![feature(box_raw)]
+/// #[macro_use]
+/// extern crate ts3plugin;
+///
+/// use ts3plugin::*;
+///
+/// struct MyTsPlugin;
+///
+/// impl Plugin for MyTsPlugin
+/// {
+///     fn init(&mut self) -> InitResult
+///     {
+///         println!("Inited");
+///         InitResult::Success
+///     }
+///
+///     fn shutdown(&mut self)
+///     {
+///         println!("Shutdown");
+///     }
+/// }
+///
+/// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
+///     "A wonderful tiny example plugin\0", MyTsPlugin);
+/// # fn main() {}
+/// ```
 pub trait Plugin
 {
     // Required functions
@@ -63,10 +98,20 @@ pub struct PluginData
 ///  - author      - The author of the plugin as displayed in TeamSpeak
 ///  - description - The description of the plugin as displayed in TeamSpeak
 ///  - typename    - The type of the class that implements the plugin
+///
+/// # Examples
+///
+/// Create an example plugin with a given name, version, author, description and
+/// a struct `MyTsPlugin` that implements the `Plugin` trait:
+///
+/// ```ignore
+/// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
+///     "A wonderful tiny example plugin\0", MyTsPlugin);
+/// ```
 #[macro_export]
 macro_rules! create_plugin
 {
-    ($name: expr, $version: expr, $author: expr, $description: expr, $typename: ty) =>
+    ($name: expr, $version: expr, $author: expr, $description: expr, $typename: expr) =>
     {
         #[no_mangle]
         pub static PLUGIN_DATA: $crate::PluginData = $crate::PluginData
@@ -80,7 +125,7 @@ macro_rules! create_plugin
         #[no_mangle]
         pub fn create_instance() -> *mut $crate::Plugin
         {
-            Box::into_raw(Box::new(TTSPlugin))
+            Box::into_raw(Box::new($typename))
         }
 
         #[no_mangle]

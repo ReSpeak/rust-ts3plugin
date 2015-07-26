@@ -6,7 +6,6 @@ use ts3plugin_sys::ts3functions::Ts3Functions;
 extern
 {
     /// Use the macro `create_plugin` to export the name, etc. of the plugin.
-    #[no_mangle]
     static PLUGIN_DATA: ::PluginData;
 
     /// Create an instance of the plugin.
@@ -17,7 +16,8 @@ extern
     fn remove_instance(instance: *mut ::Plugin);
 }
 
-/// We have to manually create and delete this at `init` and `shutdown`
+/// We have to manually create and delete this at `init` and `shutdown` by using
+/// `create_instance` and `remove_instance`.
 static mut plugin: Option<*mut ::Plugin> = None;
 
 /// The api functions provided by TeamSpeak
@@ -34,13 +34,13 @@ static mut ts3functions: Option<Ts3Functions> = None;
 /// Declare a static null-terminated string:
 ///
 /// ```
-/// text: &'static str = "TEXT\0";
+/// let text: &'static str = "TEXT\0";
 /// ```
 ///
 /// Simply return a string:
 ///
 /// ```
-/// # fn get_name(&self) -> &'static str
+/// # fn get_name() -> &'static str
 /// # {
 /// "TEXT\0"
 /// # }
@@ -96,6 +96,7 @@ pub unsafe extern fn ts3plugin_init() -> libc::c_int
     if let Some(instance) = plugin
     {
         remove_instance(instance);
+        plugin = None;
     }
 
     // Create a new plugin instance
@@ -113,4 +114,5 @@ pub unsafe extern fn ts3plugin_shutdown()
 {
     (*plugin.expect("Plugin should be loaded")).shutdown();
     remove_instance(plugin.unwrap());
+    plugin = None;
 }
