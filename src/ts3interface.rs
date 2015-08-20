@@ -3,6 +3,8 @@ use libc;
 use ts3plugin_sys::ts3functions::Ts3Functions;
 
 /// This variables will be exported by the library that finally implements a plugin.
+// Silence a warning that comes without reason and isn't fixable
+#[allow(improper_ctypes)]
 extern
 {
     /// Use the macro `create_plugin` to export the name, etc. of the plugin.
@@ -103,9 +105,9 @@ pub unsafe extern fn ts3plugin_init() -> libc::c_int
     plugin = Some(create_instance());
     match (*plugin.expect("Plugin should be loaded")).init()
     {
-        ::InitResult::Success =>           0,
-        ::InitResult::Failure =>          -1,
-        ::InitResult::FailureNoMessage => -1
+        ::InitResult::Success          => 0,
+        ::InitResult::Failure          => 1,
+        ::InitResult::FailureNoMessage => -2
     }
 }
 
