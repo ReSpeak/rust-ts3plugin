@@ -1,5 +1,7 @@
-use libc;
+use libc::*;
 
+use std::ffi::*;
+use std::mem::transmute;
 use ts3plugin_sys::ts3functions::Ts3Functions;
 
 /// This variables will be exported by the library that finally implements a plugin.
@@ -23,7 +25,7 @@ extern
 static mut plugin: Option<*mut ::Plugin> = None;
 
 /// The api functions provided by TeamSpeak
-static mut ts3functions: Option<Ts3Functions> = None;
+pub static mut ts3functions: Option<Ts3Functions> = None;
 
 // ************************** Interface for TeamSpeak **************************
 
@@ -48,38 +50,46 @@ static mut ts3functions: Option<Ts3Functions> = None;
 /// # }
 /// ```
 #[no_mangle]
-pub unsafe extern fn ts3plugin_name() -> *const libc::c_char
+pub unsafe extern fn ts3plugin_name() -> *const c_char
 {
-    PLUGIN_DATA.name.as_ptr() as *const libc::c_char
+    PLUGIN_DATA.name.as_ptr() as *const c_char
 }
 
 /// The version of the plugin.
 /// Can be called before init.
 #[no_mangle]
-pub unsafe extern fn ts3plugin_version() -> *const libc::c_char
+pub unsafe extern fn ts3plugin_version() -> *const c_char
 {
-    PLUGIN_DATA.version.as_ptr() as *const libc::c_char
+    PLUGIN_DATA.version.as_ptr() as *const c_char
 }
 
 /// The author of the plugin.
 /// Can be called before init.
 #[no_mangle]
-pub unsafe extern fn ts3plugin_author() -> *const libc::c_char
+pub unsafe extern fn ts3plugin_author() -> *const c_char
 {
-    PLUGIN_DATA.author.as_ptr() as *const libc::c_char
+    PLUGIN_DATA.author.as_ptr() as *const c_char
 }
 
 /// The desription of the plugin.
 /// Can be called before init.
 #[no_mangle]
-pub unsafe extern fn ts3plugin_description() -> *const libc::c_char
+pub unsafe extern fn ts3plugin_description() -> *const c_char
 {
-    PLUGIN_DATA.description.as_ptr() as *const libc::c_char
+    PLUGIN_DATA.description.as_ptr() as *const c_char
+}
+
+/// If the plugin offers the possibility to be configured by the user.
+#[allow(non_snake_case)]
+#[no_mangle]
+pub unsafe extern fn ts3plugin_offersConfigure() -> c_int
+{
+    PLUGIN_DATA.configurable as c_int
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern fn ts3plugin_apiVersion() -> libc::c_int
+pub extern fn ts3plugin_apiVersion() -> c_int
 {
     20
 }
@@ -92,7 +102,7 @@ pub unsafe extern fn ts3plugin_setFunctionPointers(funs: Ts3Functions)
 }
 
 #[no_mangle]
-pub unsafe extern fn ts3plugin_init() -> libc::c_int
+pub unsafe extern fn ts3plugin_init() -> c_int
 {
     // Delete the old instance if one exists
     if let Some(instance) = plugin
@@ -117,4 +127,28 @@ pub unsafe extern fn ts3plugin_shutdown()
     (*plugin.expect("Plugin should be loaded")).shutdown();
     remove_instance(plugin.unwrap());
     plugin = None;
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+pub unsafe extern fn ts3plugin_onConnectStatusChangeEvent(sc_handler_id: u64, new_status: c_int, error_number: c_uint)
+{
+    (*plugin.expect("Plugin should be loaded")).on_connect_status_change(
+        ::Server { id: sc_handler_id },
+        transmute(new_status),
+        transmute(error_number));
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+pub unsafe extern fn ts3plugin_onClientMoveEvent(sc_handler_id: u64, client_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char)
+{
+    let server = ::Server { id: sc_handler_id };
+    let message = String::from_utf8_lossy(CStr::from_ptr(move_message).to_bytes()).into_owned();
+    (*plugin.expect("Plugin should be loaded")).on_client_move(
+        ::Connection { id: client_id, server: server.clone() },
+        ::Channel { id: old_channel_id, server: server.clone() },
+        ::Channel { id: new_channel_id, server: server.clone() },
+        transmute(visibility),
+        &message);
 }

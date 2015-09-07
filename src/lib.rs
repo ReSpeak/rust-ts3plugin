@@ -3,10 +3,25 @@ extern crate ts3plugin_sys;
 
 pub mod ts3interface;
 
+use libc::*;
+use std::ffi::*;
 use ts3plugin_sys::clientlib_publicdefinitions::*;
 use ts3plugin_sys::plugin_definitions::*;
 use ts3plugin_sys::public_definitions::*;
 use ts3plugin_sys::public_errors::Error;
+
+// Helper functions
+
+/// Converts a normal string to a CString
+macro_rules! to_cstring
+{
+    ($string: expr) =>
+    {
+        CString::new($string).unwrap_or(
+            CString::new("String contains null character").unwrap())
+    };
+}
+
 
 #[derive(Debug)]
 pub enum InitResult
@@ -20,8 +35,8 @@ pub enum InitResult
     /// a dialog (e.g. overlay) asking the user to disable the plugin again,
     /// avoiding the show another dialog by the client telling the user the
     /// plugin failed to load.
-	/// For normal case, if a plugin really failed to load because of an error,
-	/// the correct return value is `Failure`.
+    /// For normal case, if a plugin really failed to load because of an error,
+    /// the correct return value is `Failure`.
     FailureNoMessage
 }
 
@@ -37,10 +52,20 @@ pub enum InitResult
 /// #![feature(box_raw)]
 /// #[macro_use]
 /// extern crate ts3plugin;
+/// extern crate ts3plugin_sys;
 ///
 /// use ts3plugin::*;
+/// use ts3plugin_sys::plugin_definitions::ConfigureOffer;
 ///
 /// struct MyTsPlugin;
+///
+/// impl MyTsPlugin
+/// {
+///     fn new() -> MyTsPlugin
+///     {
+///         MyTsPlugin
+///     }
+/// }
 ///
 /// impl Plugin for MyTsPlugin
 /// {
@@ -57,7 +82,7 @@ pub enum InitResult
 /// }
 ///
 /// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", MyTsPlugin);
+///     "A wonderful tiny example plugin\0", ConfigureOffer::No, MyTsPlugin);
 /// # fn main() {}
 /// ```
 #[allow(unused_variables)]
@@ -71,16 +96,24 @@ pub trait Plugin
     ///
     /// Note:
     ///
-	/// If your plugin implements a settings dialog, it must be closed and
-	/// deleted here, else the TeamSpeak client will most likely crash (library
-	/// removed but dialog from the library code is still used).
+    /// If your plugin implements a settings dialog, it must be closed and
+    /// deleted here, else the TeamSpeak client will most likely crash (library
+    /// removed but dialog from the library code is still used).
     fn shutdown(&mut self);
 
 
+    // ******************************* Callbacks *******************************
+    fn on_connect_status_change(&mut self, server: Server, new_status:
+        ConnectStatus, error_number: Error) {}
+    fn on_client_move(&mut self, client: Connection, old_channel: Channel,
+        new_channel: Channel, visibility: Visibility, move_message: &str) {}
+
+
+
+
+
+    // Should it be like this??
     // ************************** Optional functions ***************************
-    /// Tell client if plugin offers a configuration window.
-    /// If this function is not overwritten, ConfigureOffer::No is returned.
-    fn offers_configure(&self) -> ConfigureOffer { ConfigureOffer::No }
 
     /// Plugin might offer a configuration window. If offers_configure returns
     /// ConfigureOffer::No, this function does not need to be implemented.
@@ -139,8 +172,6 @@ pub trait Plugin
     fn init_hotkeys(&mut self) -> Option<Vec<Hotkey>> { None }
 
     // ******************************* Callbacks *******************************
-    fn on_connect_status_change(&mut self, connection_id: u64, new_status:
-        ConnectStatus, error_number: Error) {}
     fn on_new_channel(&mut self, connection_id: u64, channel_id: u64,
         channel_parent_id: u64) {}
     fn on_new_channel_created(&mut self, connection_id: u64, channel_id: u64,
@@ -156,9 +187,6 @@ pub trait Plugin
         invoker_id: u16, invoker_name: &str, invoker_unique_id: &str) {}
     fn on_update_client(&mut self, connection_id: u64, invoker_id: u16,
         invoker_name: &str, invoker_unique_id: &str) {}
-    fn on_client_move(&mut self, connection_id: u64, client_id: u16,
-        old_channel_id: u64, new_channel_id: u64, visibility: Visibility,
-        move_message: &str) {}
     fn on_client_move_subscription(&mut self, connection_id: u64, client_id:
         u16, old_channel_id: u64, new_channel_id: u64, visibility: Visibility)
         {}
@@ -289,13 +317,176 @@ pub trait Plugin
     //TODO line 1053 fn on_(&mut self, connection_id: u64, ) {}
 }
 
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub struct Server
+{
+    id: u64
+}
+
+impl Server
+{
+    pub fn get_id(&self) -> u64
+    {
+        self.id
+    }
+
+    pub fn get_own_connection(&self) -> Result<Connection, Error>
+    {
+        let mut id: u16 = 0;
+        let res: Error = unsafe { std::mem::transmute((ts3interface::ts3functions.as_ref()
+            .expect("Functions should be loaded").get_client_id)
+                (self.id, &mut id as *mut u16)) };
+        match res
+        {
+            Error::Ok => Ok(Connection { id: id, server: self.clone() }),
+            _         => Err(res)
+        }
+    }
+
+    pub fn get_property_as_string(&self, property: VirtualServerProperties) -> Result<Box<String>, Error>
+    {
+        unsafe
+        {
+            let mut name: *mut c_char = std::ptr::null_mut();
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_server_variable_as_string)
+                    (self.id, property as size_t, &mut name));
+            match res
+            {
+                Error::Ok => Ok(Box::new(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned())),
+                _ => Err(res)
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub struct Channel
+{
+    id: u64,
+    server: Server
+}
+
+impl Channel
+{
+    pub fn get_id(&self) -> u64
+    {
+        self.id
+    }
+
+    pub fn get_server(&self) -> &Server
+    {
+        &self.server
+    }
+
+    pub fn get_property_as_string(&self, property: ChannelProperties) -> Result<Box<String>, Error>
+    {
+        unsafe
+        {
+            let mut name: *mut c_char = std::ptr::null_mut();
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_variable_as_string)
+                    (self.server.id, self.id, property as size_t, &mut name));
+            match res
+            {
+                Error::Ok => Ok(Box::new(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned())),
+                _ => Err(res)
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub struct Connection
+{
+    id: u16,
+    server: Server
+}
+
+impl Connection
+{
+    pub fn get_id(&self) -> u16
+    {
+        self.id
+    }
+
+    pub fn get_server(&self) -> &Server
+    {
+        &self.server
+    }
+
+    pub fn get_property_as_string(&self, property: ConnectionProperties) -> Result<Box<String>, Error>
+    {
+        unsafe
+        {
+            let mut name: *mut c_char = std::ptr::null_mut();
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_connection_variable_as_string)
+                    (self.server.id, self.id, property as size_t, &mut name));
+            match res
+            {
+                Error::Ok => Ok(Box::new(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned())),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn get_client_property_as_string(&self, property: ClientProperties) -> Result<Box<String>, Error>
+    {
+        unsafe
+        {
+            let mut name: *mut c_char = std::ptr::null_mut();
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_client_variable_as_string)
+                    (self.server.id, self.id, property as size_t, &mut name));
+            match res
+            {
+                Error::Ok => Ok(Box::new(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned())),
+                _ => Err(res)
+            }
+        }
+    }
+}
+
+pub struct TsApi;
+
+impl TsApi
+{
+    pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error>
+    {
+        unsafe
+        {
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").log_message)
+                    (to_cstring!(message).as_ptr(),
+                    severity, to_cstring!(channel).as_ptr(), 0));
+            match res
+            {
+                Error::Ok => Ok(()),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn log_or_print(message: &str, channel: &str, severity: LogLevel)
+    {
+        if let Err(error) = TsApi::log_message(message, channel, severity)
+        {
+            println!("Error {0:?} while printing '{1}' to {2} ({3:?})", error,
+                message, channel, severity);
+        }
+    }
+}
+
+/// A struct that is used for the internal representation of the plugin
 #[repr(C)]
 pub struct PluginData
 {
-    pub name:        &'static str,
-    pub version:     &'static str,
-    pub author:      &'static str,
-    pub description: &'static str
+    pub name:         &'static str,
+    pub version:      &'static str,
+    pub author:       &'static str,
+    pub description:  &'static str,
+    pub configurable: ConfigureOffer
 }
 
 /// Create a plugin. This macro has to be called once per library to create the
@@ -305,11 +496,13 @@ pub struct PluginData
 ///
 /// # Arguments
 ///
-///  - name        - The name of the plugin as displayed in TeamSpeak
-///  - version     - The version of the plugin as displayed in TeamSpeak
-///  - author      - The author of the plugin as displayed in TeamSpeak
-///  - description - The description of the plugin as displayed in TeamSpeak
-///  - typename    - The type of the class that implements the plugin
+///  - name         - The name of the plugin as displayed in TeamSpeak
+///  - version      - The version of the plugin as displayed in TeamSpeak
+///  - author       - The author of the plugin as displayed in TeamSpeak
+///  - description  - The description of the plugin as displayed in TeamSpeak
+///  - configurable - If the plugin offers the possibility to be configured.
+///  - typename     - The type of the class that implements the plugin and has a
+///                  `new()`-function
 ///
 /// # Examples
 ///
@@ -318,12 +511,13 @@ pub struct PluginData
 ///
 /// ```ignore
 /// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", MyTsPlugin);
+///     "A wonderful tiny example plugin\0", ConfigureOffer::No, MyTsPlugin);
 /// ```
 #[macro_export]
 macro_rules! create_plugin
 {
-    ($name: expr, $version: expr, $author: expr, $description: expr, $typename: expr) =>
+    ($name: expr, $version: expr, $author: expr, $description: expr,
+        $configurable: expr, $typename: ident) =>
     {
         #[no_mangle]
         pub static PLUGIN_DATA: $crate::PluginData = $crate::PluginData
@@ -331,13 +525,14 @@ macro_rules! create_plugin
             name: $name,
             version: $version,
             author: $author,
+            configurable: $configurable,
             description: $description
         };
 
         #[no_mangle]
         pub fn create_instance() -> *mut $crate::Plugin
         {
-            Box::into_raw(Box::new($typename))
+            Box::into_raw(Box::new($typename::new()))
         }
 
         #[no_mangle]
