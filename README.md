@@ -1,6 +1,6 @@
 TS3Plugin API
 =============
-The documentation can be found [here on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
+The documentation can be found [on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
 
 Usage
 -----
@@ -16,13 +16,20 @@ git = "https://github.com/Flakebi/rust-ts3plugin"
 
 This code can be used to make your library a TeamSpeak plugin:
 ```
-#![feature(box_raw)]
 #[macro_use]
 extern crate ts3plugin;
 
 use ts3plugin::*;
 
 struct MyTsPlugin;
+
+impl MyTsPlugin
+{
+    fn new() -> MyTsPlugin
+    {
+        MyTsPlugin
+    }
+}
 
 impl Plugin for MyTsPlugin
 {
@@ -39,7 +46,7 @@ impl Plugin for MyTsPlugin
 }
 
 create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-    "A wonderful tiny example plugin\0", MyTsPlugin);
+    "A wonderful tiny example plugin\0", ConfigureOffer::No, MyTsPlugin);
 ```
 
 License

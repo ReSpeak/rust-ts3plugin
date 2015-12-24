@@ -5,10 +5,12 @@ pub mod ts3interface;
 
 use libc::*;
 use std::ffi::*;
-use ts3plugin_sys::clientlib_publicdefinitions::*;
-use ts3plugin_sys::plugin_definitions::*;
-use ts3plugin_sys::public_definitions::*;
-use ts3plugin_sys::public_errors::Error;
+
+pub use ts3plugin_sys::clientlib_publicdefinitions::*;
+pub use ts3plugin_sys::plugin_definitions::*;
+pub use ts3plugin_sys::public_definitions::*;
+pub use ts3plugin_sys::public_errors::Error;
+pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 // Helper functions
 
@@ -49,13 +51,10 @@ pub enum InitResult
 /// A fully working example that creates a plugin that does nothing:
 ///
 /// ```
-/// #![feature(box_raw)]
 /// #[macro_use]
 /// extern crate ts3plugin;
-/// extern crate ts3plugin_sys;
 ///
 /// use ts3plugin::*;
-/// use ts3plugin_sys::plugin_definitions::ConfigureOffer;
 ///
 /// struct MyTsPlugin;
 ///
@@ -103,20 +102,65 @@ pub trait Plugin
 
 
     // ******************************* Callbacks *******************************
+    /// Plugin requests to be always automatically loaded by the TeamSpeak
+    /// client unless the user manually disabled it in the plugin dialog.
+    /// The default value is `false` which means the plugin won't be loaded
+    /// automatically.
+    fn request_autoload(&self) -> bool { false }
     fn on_connect_status_change(&mut self, server: Server, new_status:
         ConnectStatus, error_number: Error) {}
     fn on_client_move(&mut self, client: Connection, old_channel: Channel,
-        new_channel: Channel, visibility: Visibility, move_message: &str) {}
+        new_channel: Channel, visibility: Visibility, move_message: String) {}
+    fn on_client_move_moved(&mut self, client: Connection, old_channel: Channel,
+        new_channel: Channel, visibility: Visibility, invoker: Connection,
+        move_message: String) {}
+    fn on_client_move_timeout(&mut self, client: Connection, old_channel: Channel,
+        new_channel: Channel, visibility: Visibility, move_message: String) {}
+    fn on_client_move_subscription(&mut self, client: Connection, old_channel: Channel,
+        new_channel: Channel, visibility: Visibility) {}
+    fn on_talk_status_change(&mut self, client: Connection, status: TalkStatus,
+        is_received_whisper: bool) {}
+    fn on_update_channel_edited(&mut self, channel: Channel, invoker: Connection) {}
+    fn on_update_client(&mut self, client: Connection, invoker: Connection) {}
+    /// `ff_ignored` is `true` if the friend/foe manager ignored that message.
+    ///
+    /// If `true` is returned, the TeamSpeak client will ignore this message, if
+    /// `false` is returned, it will be handled normally.
+    fn on_text_message(&mut self, mode: TextMessageTargetMode, sender: Connection,
+        receiver: Connection, message: String, ff_ignored: bool) -> bool
+    {
+        false
+    }
+    /// Client changed current server connection handler.
+    fn on_current_server_connection_changed(&mut self, server: Server) {}
+    /// After a connection has been established, all current channels on the
+    // server are announced to the client with this event.
+    fn on_new_channel(&mut self, channel: Channel, parent_channel: Channel) {}
+    fn on_new_channel_created(&mut self, channel: Channel,
+        parent_channel: Channel, invoker: Connection) {}
+    fn on_delete_channel(&mut self, channel: Channel, invoker: Connection) {}
+    fn on_channel_move(&mut self, channel: Channel, new_parent_channel: Channel,
+        invoker: Connection) {}
+    fn on_client_kick_from_channel(&mut self, client: Connection,
+        old_channel: Channel, new_channel: Channel, visibility: Visibility,
+        invoker: Connection, kick_message: String) {}
+    fn on_client_kick_from_server(&mut self, client: Connection,
+        old_channel: Channel, new_channel: Channel, visibility: Visibility,
+        invoker: Connection, kick_message: String) {}
+    fn on_server_group_client_added(&mut self, client: Connection,
+        group: ServerGroup, invoker: Connection) {}
+    fn on_server_group_client_deleted(&mut self, client: Connection,
+        group: ServerGroup, invoker: Connection) {}
 
 
 
 
 
-    // Should it be like this??
+    // The following callbacks are not implemented (and get the wrong arguments)
     // ************************** Optional functions ***************************
 
-    /// Plugin might offer a configuration window. If offers_configure returns
-    /// ConfigureOffer::No, this function does not need to be implemented.
+    /// Plugin might offer a configuration window. If the ConfigureOffer is
+    /// `ConfigureOffer::No`, this function does not need to be implemented.
     //FIXME fn configure(&mut self, handle: *void, q_parent_widget: *void) {}
     fn configure(&mut self) {}
 
@@ -135,9 +179,6 @@ pub trait Plugin
     /// command, `false` if not handled.
     fn process_command(&mut self, connection_id: u64, command: &str) -> bool { false }
 
-    /// Client changed current server connection handler.
-    fn current_server_connection_changed(&mut self, s: u64) {}
-
     /// Implement the following three functions when the plugin should display a
     /// line in the server/channel/client info.
     fn info_title(&self) -> String { "".to_string() }
@@ -148,12 +189,6 @@ pub trait Plugin
     /// info data.
     fn info_data(&mut self, connection_id: u64, id: u64, item_type: ItemType) ->
         Option<String> { None }
-
-    /// Plugin requests to be always automatically loaded by the TeamSpeak 3
-    /// client unless the user manually disabled it in the plugin dialog.
-    /// The default value is `false` which means the plugin won't be loaded
-    /// automatically.
-    fn request_autoload(&self) -> bool { false }
 
     /// Initialize plugin menus.
     /// This function is called after `init` and `register_plugin_id`. A
@@ -172,38 +207,7 @@ pub trait Plugin
     fn init_hotkeys(&mut self) -> Option<Vec<Hotkey>> { None }
 
     // ******************************* Callbacks *******************************
-    fn on_new_channel(&mut self, connection_id: u64, channel_id: u64,
-        channel_parent_id: u64) {}
-    fn on_new_channel_created(&mut self, connection_id: u64, channel_id: u64,
-        channel_parent_id: u64, invoker_id: u16, invoker_name: &str,
-        invoker_unique_id: &str) {}
-    fn on_delete_channel(&mut self, connection_id: u64, channel_id: u64,
-        invoker_id: u16, invoker_name: &str, invoker_unique_id: &str) {}
-    fn on_channel_move(&mut self, connection_id: u64, channel_id: u64,
-        new_channel_parent_id: u64, invoker_id: u16, invoker_name: &str,
-        invoker_unique_id: &str) {}
     fn on_update_channel(&mut self, connection_id: u64, channel_id: u64) {}
-    fn on_update_channel_edited(&mut self, connection_id: u64, channel_id: u64,
-        invoker_id: u16, invoker_name: &str, invoker_unique_id: &str) {}
-    fn on_update_client(&mut self, connection_id: u64, invoker_id: u16,
-        invoker_name: &str, invoker_unique_id: &str) {}
-    fn on_client_move_subscription(&mut self, connection_id: u64, client_id:
-        u16, old_channel_id: u64, new_channel_id: u64, visibility: Visibility)
-        {}
-    fn on_client_move_timeout(&mut self, connection_id: u64, client_id: u16,
-        old_channel_id: u64, new_channel_id: u64, visibility: Visibility,
-        timeout_message: &str) {}
-    fn on_client_move_moved(&mut self, connection_id: u64, client_id: u16,
-        old_channel_id: u64, new_channel_id: u64, visibility: Visibility,
-        mover_id: u16, mover_name: &str, mover_unique_id: &str, move_message:
-        &str) {}
-    fn on_client_kick_from_channel(&mut self, connection_id: u64, client_id:
-        u16, old_channel_id: u64, new_channel_id: u64, visibility: Visibility,
-        kicker_id: u16, kicker_name: &str, kicker_unique_id: &str, kick_message:
-        &str) {}
-    fn on_client_kick_from_server(&mut self, connection_id: u64, client_id: u16,
-        old_channel_id: u64, new_channel_id: u64, visibility: Visibility,
-        kicker_name: &str, kicker_unique_id: &str, kick_message: &str) {}
     fn on_client_ids(&mut self, connection_id: u64, unique_client_id: &str,
         client_id: u16, client_name: &str) {}
     fn on_client_ids_finished(&mut self, connection_id: u64) {}
@@ -215,12 +219,6 @@ pub trait Plugin
     fn on_server_error(&mut self, connection_id: u64, error_message: &str,
         error: Error, return_code: &str, extra_message: &str) -> bool { false }
     fn on_server_stop(&mut self, connection_id: u64, shutdown_message: &str) {}
-    /// `ff_ignored` is `true` if the friend/foe manager ignored that message.
-    fn on_text_message(&mut self, connection_id: u64, target_mode: u16, to_id:
-        u16, from_id: u16, from_name: &str, from_unique_id: &str, message: &str,
-        ff_ignored: bool) {}
-    fn on_talk_status_change(&mut self, connection_id: u64, status: TalkStatus,
-        is_receiving_whisper: bool, client_id: u16) {}
     fn on_connection_info(&mut self, connection_id: u64, client_id: u16) {}
     fn on_server_connection_info(&mut self, connection_id: u64) {}
     fn on_channel_subscribe(&mut self, connection_id: u64, channel_id: u64) {}
@@ -335,7 +333,7 @@ impl Server
         let mut id: u16 = 0;
         let res: Error = unsafe { std::mem::transmute((ts3interface::ts3functions.as_ref()
             .expect("Functions should be loaded").get_client_id)
-                (self.id, &mut id as *mut u16)) };
+                (self.id, &mut id)) };
         match res
         {
             Error::Ok => Ok(Connection { id: id, server: self.clone() }),
@@ -354,6 +352,32 @@ impl Server
             match res
             {
                 Error::Ok => Ok(Box::new(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned())),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn get_connections(&self) -> Result<Vec<Connection>, Error>
+    {
+        unsafe
+        {
+            let mut result: *mut u16 = std::ptr::null_mut();
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_client_list)
+                    (self.id, &mut result));
+            match res
+            {
+                Error::Ok =>
+                {
+                    let mut cs = Vec::new();
+                    let mut counter = 0;
+                    while *result.offset(counter) != 0
+                    {
+                        cs.push(Connection { server: self.clone(), id: *result.offset(counter) });
+                        counter += 1;
+                    }
+                    Ok(cs)
+                }
                 _ => Err(res)
             }
         }
@@ -415,6 +439,22 @@ impl Connection
         &self.server
     }
 
+    pub fn get_channel(&self) -> Result<Channel, Error>
+    {
+        unsafe
+        {
+            let mut id: u64 = 0;
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_of_client)
+                    (self.server.id, self.id, &mut id));
+            match res
+            {
+                Error::Ok => Ok(Channel { server: self.server.clone(), id: id }),
+                _ => Err(res)
+            }
+        }
+    }
+
     pub fn get_property_as_string(&self, property: ConnectionProperties) -> Result<Box<String>, Error>
     {
         unsafe
@@ -446,12 +486,53 @@ impl Connection
             }
         }
     }
+
+    pub fn get_client_property_as_int(&self, property: ClientProperties) -> Result<i32, Error>
+    {
+        unsafe
+        {
+            let mut result: c_int = 0;
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_client_variable_as_int)
+                    (self.server.id, self.id, property as size_t, &mut result));
+            match res
+            {
+                Error::Ok => Ok(result as i32),
+                _ => Err(res)
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub struct ServerGroup
+{
+    id: u64,
+    server: Server
+}
+
+impl ServerGroup
+{
+    pub fn get_id(&self) -> u64
+    {
+        self.id
+    }
+
+    pub fn get_server(&self) -> &Server
+    {
+        &self.server
+    }
 }
 
 pub struct TsApi;
 
 impl TsApi
 {
+    pub unsafe fn get_raw_functions<'a>() -> &'a Ts3Functions
+    {
+        ts3interface::ts3functions.as_ref().expect("Functions should be loaded")
+    }
+
     pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error>
     {
         unsafe
