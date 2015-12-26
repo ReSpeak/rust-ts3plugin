@@ -81,7 +81,7 @@ pub enum InitResult
 /// }
 ///
 /// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", ConfigureOffer::No, MyTsPlugin);
+///     "A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
 /// # fn main() {}
 /// ```
 #[allow(unused_variables)]
@@ -567,6 +567,7 @@ pub struct PluginData
     pub version:      &'static str,
     pub author:       &'static str,
     pub description:  &'static str,
+    pub autoload:     bool,
     pub configurable: ConfigureOffer
 }
 
@@ -581,9 +582,11 @@ pub struct PluginData
 ///  - version      - The version of the plugin as displayed in TeamSpeak
 ///  - author       - The author of the plugin as displayed in TeamSpeak
 ///  - description  - The description of the plugin as displayed in TeamSpeak
-///  - configurable - If the plugin offers the possibility to be configured.
+///  - configurable - If the plugin offers the possibility to be configured
+///  - autoload     - If the plugin should be loaded by default or only if
+///                   activated manually
 ///  - typename     - The type of the class that implements the plugin and has a
-///                  `new()`-function
+///                   `new()`-function
 ///
 /// # Examples
 ///
@@ -592,13 +595,13 @@ pub struct PluginData
 ///
 /// ```ignore
 /// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", ConfigureOffer::No, MyTsPlugin);
+///     "A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
 /// ```
 #[macro_export]
 macro_rules! create_plugin
 {
     ($name: expr, $version: expr, $author: expr, $description: expr,
-        $configurable: expr, $typename: ident) =>
+        $configurable: expr, $autoload: expr, $typename: ident) =>
     {
         #[no_mangle]
         pub static PLUGIN_DATA: $crate::PluginData = $crate::PluginData
@@ -607,6 +610,7 @@ macro_rules! create_plugin
             version: $version,
             author: $author,
             configurable: $configurable,
+            autoload: $autoload,
             description: $description
         };
 

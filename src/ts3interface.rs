@@ -89,6 +89,19 @@ pub unsafe extern fn ts3plugin_offersConfigure() -> c_int
 
 #[allow(non_snake_case)]
 #[no_mangle]
+pub unsafe extern fn ts3plugin_requestAutoload() -> c_int
+{
+    if PLUGIN_DATA.autoload
+    {
+        1
+    } else
+    {
+        0
+    }
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
 pub extern fn ts3plugin_apiVersion() -> c_int
 {
     20
@@ -255,19 +268,6 @@ pub unsafe extern fn ts3plugin_currentServerConnectionChanged(sc_handler_id: u64
 {
     (*plugin.expect("Plugin should be loaded")).on_current_server_connection_changed(
         ::Server { id: sc_handler_id });
-}
-
-#[allow(non_snake_case)]
-#[no_mangle]
-pub unsafe extern fn ts3plugin_requestAutoload() -> c_int
-{
-    if (*plugin.expect("Plugin should be loaded")).request_autoload()
-    {
-        1
-    } else
-    {
-        0
-    }
 }
 
 #[allow(non_snake_case)]
