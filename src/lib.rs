@@ -615,15 +615,15 @@ macro_rules! create_plugin
         };
 
         #[no_mangle]
-        pub fn create_instance() -> *mut $crate::Plugin
+        pub fn create_instance() -> Box<$crate::Plugin>
         {
-            Box::into_raw(Box::new($typename::new()))
+            Box::new($typename::new())
         }
 
         #[no_mangle]
-        pub unsafe fn remove_instance(instance: *mut $crate::Plugin)
+        pub unsafe fn remove_instance(instance: Box<$crate::Plugin>)
         {
-            drop(Box::from_raw(instance));
+            drop(instance);
         }
     };
 }

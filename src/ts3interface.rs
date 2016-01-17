@@ -14,15 +14,15 @@ extern
 
     /// Create an instance of the plugin.
     #[no_mangle]
-    fn create_instance() -> *mut ::Plugin;
+    fn create_instance() -> Box<::Plugin>;
     /// Remove an instance of the plugin.
     #[no_mangle]
-    fn remove_instance(instance: *mut ::Plugin);
+    fn remove_instance(instance: Box<::Plugin>);
 }
 
 /// We have to manually create and delete this at `init` and `shutdown` by using
 /// `create_instance` and `remove_instance`.
-static mut plugin: Option<*mut ::Plugin> = None;
+static mut plugin: Option<*mut Box<::Plugin>> = None;
 
 /// The api functions provided by TeamSpeak
 pub static mut ts3functions: Option<Ts3Functions> = None;
@@ -120,12 +120,12 @@ pub unsafe extern fn ts3plugin_init() -> c_int
     // Delete the old instance if one exists
     if let Some(instance) = plugin
     {
-        remove_instance(instance);
+        remove_instance(*Box::from_raw(instance));
         plugin = None;
     }
 
     // Create a new plugin instance
-    plugin = Some(create_instance());
+    plugin = Some(Box::into_raw(Box::new(create_instance())));
     match (*plugin.expect("Plugin should be loaded")).init()
     {
         ::InitResult::Success          => 0,
@@ -138,7 +138,7 @@ pub unsafe extern fn ts3plugin_init() -> c_int
 pub unsafe extern fn ts3plugin_shutdown()
 {
     (*plugin.expect("Plugin should be loaded")).shutdown();
-    remove_instance(plugin.unwrap());
+    remove_instance(*Box::from_raw(plugin.unwrap()));
     plugin = None;
 }
 
