@@ -3,14 +3,20 @@ extern crate ts3plugin_sys;
 
 pub mod ts3interface;
 
-use libc::*;
+use libc::c_char;
+use libc::size_t;
 use std::ffi::*;
 
+pub use libc::c_int;
 pub use ts3plugin_sys::clientlib_publicdefinitions::*;
 pub use ts3plugin_sys::plugin_definitions::*;
 pub use ts3plugin_sys::public_definitions::*;
 pub use ts3plugin_sys::public_errors::Error;
 pub use ts3plugin_sys::ts3functions::Ts3Functions;
+
+/// We have to manually create and delete this at `init` and `shutdown` by using
+/// `create_instance` and `remove_instance`.
+pub static mut plugin: Option<*mut ::Plugin> = None;
 
 // Helper functions
 
@@ -80,8 +86,8 @@ pub enum InitResult
 ///     }
 /// }
 ///
-/// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
+/// create_plugin!(b"My Ts Plugin\0", b"0.1.0\0", b"My Name\0",
+///     b"A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
 /// # fn main() {}
 /// ```
 #[allow(unused_variables)]
@@ -563,10 +569,10 @@ impl TsApi
 #[repr(C)]
 pub struct PluginData
 {
-    pub name:         &'static str,
-    pub version:      &'static str,
-    pub author:       &'static str,
-    pub description:  &'static str,
+    pub name:         &'static [u8],
+    pub version:      &'static [u8],
+    pub author:       &'static [u8],
+    pub description:  &'static [u8],
     pub autoload:     bool,
     pub configurable: ConfigureOffer
 }
@@ -594,8 +600,8 @@ pub struct PluginData
 /// a struct `MyTsPlugin` that implements the `Plugin` trait:
 ///
 /// ```ignore
-/// create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-///     "A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
+/// create_plugin!(b"My Ts Plugin\0", b"0.1.0\0", b"My Name\0",
+///     b"A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
 /// ```
 #[macro_export]
 macro_rules! create_plugin
@@ -615,15 +621,32 @@ macro_rules! create_plugin
         };
 
         #[no_mangle]
-        pub fn create_instance() -> Box<$crate::Plugin>
+        pub unsafe extern fn ts3plugin_init() -> c_int
         {
-            Box::new($typename::new())
+            // Delete the old instance if one exists
+            if let Some(instance) = $crate::plugin
+            {
+                drop(Box::from_raw(instance));
+                plugin = None;
+            }
+
+            // Create a new plugin instance
+            let res = Box::into_raw(Box::new($typename::new()));
+            plugin = Some(res);
+            match (*res).init()
+            {
+                $crate::InitResult::Success          => 0,
+                $crate::InitResult::Failure          => 1,
+                $crate::InitResult::FailureNoMessage => -2
+            }
         }
 
         #[no_mangle]
-        pub unsafe fn remove_instance(instance: Box<$crate::Plugin>)
+        pub unsafe extern fn ts3plugin_shutdown()
         {
-            drop(instance);
+            //(*plugin.expect("Plugin should be loaded")).shutdown();
+            drop(Box::from_raw(plugin.unwrap()));
+            $crate::plugin = None;
         }
     };
 }

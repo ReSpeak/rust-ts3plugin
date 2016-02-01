@@ -45,8 +45,8 @@ impl Plugin for MyTsPlugin
     }
 }
 
-create_plugin!("My Ts Plugin\0", "0.1.0\0", "My Name\0",
-    "A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
+create_plugin!(b"My Ts Plugin\0", b"0.1.0\0", b"My Name\0",
+    b"A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
 ```
 
 License
