@@ -4,7 +4,7 @@ pub use std::string::String;
 pub use std::sync::Mutex;
 pub use std::thread;
 
-use std::thread::Thread;
+use std::thread::JoinHandle;
 
 #[derive(Debug)]
 pub enum InitError {
@@ -23,12 +23,12 @@ pub enum InitError {
 #[allow(unused_variables)]
 pub trait Plugin : Drop {
     // ************************** Required functions ***************************
-    /// Custom code called right after loading the plugin.
-    fn new() -> Result<Box<Self>, InitError>;
+    // Custom code called right after loading the plugin.
+    //fn new() -> Result<Box<Self>, InitError>;
 }
 
-// Manager thread
-pub static mut MANAGER_THREAD: Option<*mut Thread> = None;
+/// Manager thread that calls all plugin functions.
+pub static mut MANAGER_THREAD: Option<*mut JoinHandle<()>> = None;
 
 /// Create a plugin. This macro has to be called once per library to create the
 /// function interface that is used by TeamSpeak.
@@ -79,8 +79,10 @@ macro_rules! create_plugin {
             // Create a new plugin instance
             match $typename::new() {
             	Ok(plugin) => {
-            		PLUGIN = Some(Box::into_raw(plugin));
-            		//TODO start manager thread
+            		let ptr = Box::into_raw(plugin);
+            		PLUGIN = Some(ptr);
+            		// Start manager thread
+            		MANAGER_THREAD = Some(Box::into_raw(Box::new(thread::spawn(|| $crate::ts3interface::manager_thread(&mut *PLUGIN.unwrap())))));
             		0
             	},
             	Err(error) => match error {
@@ -142,7 +144,11 @@ macro_rules! create_plugin {
         #[no_mangle]
         pub unsafe extern fn ts3plugin_shutdown() {
         	if let Some(plugin) = PLUGIN {
-	        	//TODO Stop manager thread
+	        	// Stop manager thread and wait for the end
+	        	let manager_thread = *Box::from_raw(MANAGER_THREAD.take().unwrap());
+	        	if let Err(error) = manager_thread.join() {
+	        		$crate::TsApi::log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", LogLevel::Error);
+	        	}
             	drop(Box::from_raw(plugin));
 	            PLUGIN = None;
             }

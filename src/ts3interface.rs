@@ -1,11 +1,11 @@
-use libc::*;
 use ts3plugin_sys::ts3functions::Ts3Functions;
+use ::plugin::*;
 
 /// The api functions provided by TeamSpeak
 pub static mut ts3functions: Option<Ts3Functions> = None;
 
 // Manager thread
-pub fn manager_thread() {
+pub fn manager_thread(plugin: &mut Plugin) {
 	
 }
 
