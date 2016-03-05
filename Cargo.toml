@@ -8,6 +8,8 @@ name = "ts3plugin"
 
 [dependencies]
 libc = "*"
+chrono = "*"
 
 [dependencies.ts3plugin_sys]
-git = "https://github.com/Flakebi/rust-ts3plugin-sys"
+#git = "https://github.com/Flakebi/rust-ts3plugin-sys"
+path = "../ts3plugin_sys"
