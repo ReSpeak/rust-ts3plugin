@@ -1,14 +1,18 @@
 #![allow(dead_code)]
+#![feature(macro_reexport)]
+
 extern crate libc;
 extern crate chrono;
+#[macro_use]
+#[macro_reexport(lazy_static)]
+extern crate lazy_static;
 extern crate ts3plugin_sys;
 
 pub mod ts3interface;
+pub mod plugin;
 
-use libc::c_char;
-use libc::c_int;
 use libc::size_t;
-use std::ffi::*;
+use std::ffi::CStr;
 use chrono::*;
 
 pub use ts3plugin_sys::clientlib_publicdefinitions::*;
@@ -16,6 +20,21 @@ pub use ts3plugin_sys::plugin_definitions::*;
 pub use ts3plugin_sys::public_definitions::*;
 pub use ts3plugin_sys::public_errors::Error;
 pub use ts3plugin_sys::ts3functions::Ts3Functions;
+
+pub use plugin::*;
+
+/// Converts a normal string to a CString
+macro_rules! to_cstring
+{
+    ($string: expr) =>
+    {
+        CString::new($string).unwrap_or(
+            CString::new("String contains null character").unwrap())
+    };
+}
+
+// ******************** Structs ********************
+pub struct TsApi;
 
 pub struct Permissions;
 
@@ -116,7 +135,8 @@ pub struct Client {
 }
 
 
-// Implementation
+// ******************** Implementation ********************
+
 // ********** Server **********
 impl PartialEq<Server> for Server {
 	fn eq(&self, other: &Server) -> bool {
@@ -126,7 +146,7 @@ impl PartialEq<Server> for Server {
 impl Eq for Server {}
 
 impl Server {
-    pub fn get_property_as_string(id: u64, property: VirtualServerProperties) -> Result<String, Error> {
+    fn get_property_as_string(id: u64, property: VirtualServerProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
             let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
@@ -134,6 +154,19 @@ impl Server {
                     (id, property as size_t, &mut name));
             match res {
                 Error::Ok => Ok(String::from_utf8_lossy(CStr::from_ptr(name).to_bytes()).into_owned()),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn get_property_as_int(id: u64, property: VirtualServerProperties) -> Result<i32, Error> {
+        unsafe {
+            let mut number: c_int = 0;
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").get_server_variable_as_int)
+                    (id, property as size_t, &mut number));
+            match res {
+                Error::Ok => Ok(number as i32),
                 _ => Err(res)
             }
         }
@@ -148,31 +181,26 @@ impl Server {
 
 		//TODO
 		let created = UTC::now();
-		let codec_encryption_mode = CodecEncryptionMode::PerChannel;
+		let codec_encryption_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::CodecEncryptionMode))) };
 		let default_server_group = Permissions;
 		let default_channel_group = Permissions;
 		let default_channel_admin_group = Permissions;
 
 		let hostbanner_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbannerUrl));
 		let hostbanner_gfx_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbannerGfxUrl));
-
-		// TODO
-		let hostbanner_gfx_interval = Duration::seconds(0);
-		let priority_speaker_dimm_modificator = 0;
-
+		let hostbanner_gfx_interval = Duration::seconds(try!(Server::get_property_as_int(id, VirtualServerProperties::PrioritySpeakerDimmModificator)) as i64);
+		let priority_speaker_dimm_modificator = try!(Server::get_property_as_int(id, VirtualServerProperties::PrioritySpeakerDimmModificator));
 		let hostbutton_tooltip = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonTooltip));
 		let hostbutton_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonUrl));
 		let hostbutton_gfx_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonGfxUrl));
-
-		// TODO
-		let icon_id = 1;
-		let reserved_slots = 0;
-		let ask_for_privilegekey = false;
-		let hostbanner_mode = HostbannerMode::NoAdjust;
-		let channel_temp_delete_delay_default = Duration::seconds(0);
-
+		let icon_id = try!(Server::get_property_as_int(id, VirtualServerProperties::IconId));
+		let reserved_slots = try!(Server::get_property_as_int(id, VirtualServerProperties::ReservedSlots));
+		let ask_for_privilegekey = try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) != 0;
+		let hostbanner_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };
+		let channel_temp_delete_delay_default = Duration::seconds(try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) as i64);
 		let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));
-		let hostmessage_mode = HostmessageMode::None;
+		let hostmessage_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };
+
 		Ok(Server {
 			id: id,
 			uid: uid,
@@ -229,3 +257,39 @@ impl PartialEq<Client> for Client {
 	}
 }
 impl Eq for Client {}
+
+
+// ********** TsApi **********
+
+impl TsApi
+{
+    unsafe fn get_raw_functions<'a>() -> &'a Ts3Functions
+    {
+        ts3interface::ts3functions.as_ref().expect("Functions should be loaded")
+    }
+
+    pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error>
+    {
+        unsafe
+        {
+            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+                .expect("Functions should be loaded").log_message)
+                    (to_cstring!(message).as_ptr(),
+                    severity, to_cstring!(channel).as_ptr(), 0));
+            match res
+            {
+                Error::Ok => Ok(()),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn log_or_print(message: &str, channel: &str, severity: LogLevel)
+    {
+        if let Err(error) = TsApi::log_message(message, channel, severity)
+        {
+            println!("Error {0:?} while printing '{1}' to {2} ({3:?})", error,
+                message, channel, severity);
+        }
+    }
+}
