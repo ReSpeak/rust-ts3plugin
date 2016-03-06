@@ -21,6 +21,12 @@ pub trait Plugin : Drop {
     // ************************** Required functions ***************************
     // Custom code called right after loading the plugin.
     //fn new() -> Result<Box<Self>, InitError>;
+
+	/// Similar to connect_status_change, the status is `Connecting` which means
+	/// that the server is not yet available.
+    fn connecting(&mut self, error: ::Error) {}
+
+    /// If the connection status changes.
     fn connect_status_change(&mut self, server: ::Server, status:
         ::ConnectStatus, error: ::Error) {}
 }

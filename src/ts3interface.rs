@@ -18,7 +18,7 @@ enum FunctionCall {
 pub fn manager_thread(plugin: &mut Plugin, main_transmitter: Sender<()>) {
 	let (tx, rx) = channel();
 	unsafe {
-		TX = Some(&tx);
+		TX = Some(&tx)
 	}
 	// Send that we are ready
 	main_transmitter.send(()).unwrap();
@@ -26,20 +26,24 @@ pub fn manager_thread(plugin: &mut Plugin, main_transmitter: Sender<()>) {
 	// Wait for messages
 	loop {
 		match rx.recv().unwrap() {
-			FunctionCall::ConnectStatusChange(connection, status, error) =>
-				match ::Server::new(connection) {
-					Ok(server) => unsafe {
-						plugin.connect_status_change(server, transmute(status), transmute(error))
-					},
-					Err(error) => ::TsApi::log_or_print(format!("Can't get server: {:?}", error).as_ref(), "rust-ts3plugin", ::LogLevel::Error)
+			FunctionCall::ConnectStatusChange(connection, status, error) => {
+					let status = unsafe { transmute(status) };
+					let error = unsafe { transmute(error) };
+					if status == ::ConnectStatus::Connecting {
+						plugin.connecting(error)
+					} else {
+						match ::Server::new(connection) {
+							Ok(server) => plugin.connect_status_change(server, status, error),
+							Err(error) => ::TsApi::log_or_print(format!("Can't get server: {:?}", error).as_ref(), "rust-ts3plugin", ::LogLevel::Error)
+						}
+					}
 				},
 			FunctionCall::Quit => break
 		}
 	}
-    /*(*::plugin.expect("Plugin should be loaded")).on_connect_status_change(
-        ::Server { id: sc_handler_id },
-        transmute(new_status),
-        transmute(error_number));*/
+	unsafe {
+		TX = None
+	}
 }
 
 pub unsafe fn quit_manager_thread() {

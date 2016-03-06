@@ -230,6 +230,10 @@ impl Server {
 			optional_data: None,
 		})
 	}
+
+	pub fn get_name(&self) -> &String {
+		&self.name
+	}
 }
 
 // ********** Channel **********
