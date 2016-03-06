@@ -11,10 +11,6 @@ extern crate ts3plugin_sys;
 pub mod ts3interface;
 pub mod plugin;
 
-use libc::size_t;
-use std::ffi::CStr;
-use chrono::*;
-
 pub use ts3plugin_sys::clientlib_publicdefinitions::*;
 pub use ts3plugin_sys::plugin_definitions::*;
 pub use ts3plugin_sys::public_definitions::*;
@@ -23,11 +19,13 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
+use libc::size_t;
+use std::ffi::{CStr, CString};
+use chrono::*;
+
 /// Converts a normal string to a CString
-macro_rules! to_cstring
-{
-    ($string: expr) =>
-    {
+macro_rules! to_cstring {
+    ($string: expr) => {
         CString::new($string).unwrap_or(
             CString::new("String contains null character").unwrap())
     };
@@ -149,7 +147,7 @@ impl Server {
     fn get_property_as_string(id: u64, property: VirtualServerProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
-            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+            let res: Error = std::mem::transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_string)
                     (id, property as size_t, &mut name));
             match res {
@@ -162,7 +160,7 @@ impl Server {
     fn get_property_as_int(id: u64, property: VirtualServerProperties) -> Result<i32, Error> {
         unsafe {
             let mut number: c_int = 0;
-            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+            let res: Error = std::mem::transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_int)
                     (id, property as size_t, &mut number));
             match res {
@@ -260,34 +258,28 @@ impl Eq for Client {}
 
 
 // ********** TsApi **********
+static mut ts3functions: Option<Ts3Functions> = None;
 
-impl TsApi
-{
-    unsafe fn get_raw_functions<'a>() -> &'a Ts3Functions
-    {
-        ts3interface::ts3functions.as_ref().expect("Functions should be loaded")
+impl TsApi {
+    unsafe fn get_raw_functions<'a>() -> &'a Ts3Functions {
+        ts3functions.as_ref().expect("Functions should be loaded")
     }
 
-    pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error>
-    {
-        unsafe
-        {
-            let res: Error = std::mem::transmute((ts3interface::ts3functions.as_ref()
+    pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error> {
+        unsafe {
+            let res: Error = std::mem::transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").log_message)
                     (to_cstring!(message).as_ptr(),
                     severity, to_cstring!(channel).as_ptr(), 0));
-            match res
-            {
+            match res {
                 Error::Ok => Ok(()),
                 _ => Err(res)
             }
         }
     }
 
-    pub fn log_or_print(message: &str, channel: &str, severity: LogLevel)
-    {
-        if let Err(error) = TsApi::log_message(message, channel, severity)
-        {
+    pub fn log_or_print(message: &str, channel: &str, severity: LogLevel) {
+        if let Err(error) = TsApi::log_message(message, channel, severity) {
             println!("Error {0:?} while printing '{1}' to {2} ({3:?})", error,
                 message, channel, severity);
         }

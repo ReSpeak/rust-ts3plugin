@@ -1,8 +1,4 @@
 pub use libc::{c_char, c_int};
-pub use std::ffi::CString;
-pub use std::string::String;
-pub use std::sync::Mutex;
-pub use std::thread;
 
 use std::thread::JoinHandle;
 
@@ -25,6 +21,8 @@ pub trait Plugin : Drop {
     // ************************** Required functions ***************************
     // Custom code called right after loading the plugin.
     //fn new() -> Result<Box<Self>, InitError>;
+    fn connect_status_change(&mut self, server: ::Server, status:
+        ::ConnectStatus, error: ::Error) {}
 }
 
 /// Manager thread that calls all plugin functions.
@@ -59,10 +57,10 @@ macro_rules! create_plugin {
     ($name: expr, $version: expr, $author: expr, $description: expr,
         $configurable: expr, $autoload: expr, $typename: ident) => {
 	    lazy_static! {
-	    	static ref PLUGIN_NAME: CString = CString::new($name).unwrap();
-	    	static ref PLUGIN_VERSION: CString = CString::new($version).unwrap();
-	    	static ref PLUGIN_AUTHOR: CString = CString::new($author).unwrap();
-	    	static ref PLUGIN_DESCRIPTION: CString = CString::new($description).unwrap();
+	    	static ref PLUGIN_NAME: std::ffi::CString = std::ffi::CString::new($name).unwrap();
+	    	static ref PLUGIN_VERSION: std::ffi::CString = std::ffi::CString::new($version).unwrap();
+	    	static ref PLUGIN_AUTHOR: std::ffi::CString = std::ffi::CString::new($author).unwrap();
+	    	static ref PLUGIN_DESCRIPTION: std::ffi::CString = std::ffi::CString::new($description).unwrap();
 	    }
 
 		/// The used plugin
@@ -81,8 +79,13 @@ macro_rules! create_plugin {
             	Ok(plugin) => {
             		let ptr = Box::into_raw(plugin);
             		PLUGIN = Some(ptr);
+            		let (transmitter, receiver) = std::sync::mpsc::channel();
             		// Start manager thread
-            		MANAGER_THREAD = Some(Box::into_raw(Box::new(thread::spawn(|| $crate::ts3interface::manager_thread(&mut *PLUGIN.unwrap())))));
+            		MANAGER_THREAD = Some(Box::into_raw(Box::new(
+            			std::thread::spawn(move || $crate::ts3interface::manager_thread(
+            				&mut *PLUGIN.unwrap(), transmitter)))));
+            		// Wait until manager thread started up
+            		receiver.recv().unwrap();
             		0
             	},
             	Err(error) => match error {
@@ -145,9 +148,10 @@ macro_rules! create_plugin {
         pub unsafe extern fn ts3plugin_shutdown() {
         	if let Some(plugin) = PLUGIN {
 	        	// Stop manager thread and wait for the end
+	        	$crate::ts3interface::quit_manager_thread();
 	        	let manager_thread = *Box::from_raw(MANAGER_THREAD.take().unwrap());
 	        	if let Err(error) = manager_thread.join() {
-	        		$crate::TsApi::log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", LogLevel::Error);
+	        		$crate::TsApi::log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", $crate::LogLevel::Error);
 	        	}
             	drop(Box::from_raw(plugin));
 	            PLUGIN = None;
