@@ -21,6 +21,7 @@ pub use plugin::*;
 
 use libc::size_t;
 use std::ffi::{CStr, CString};
+use std::mem::transmute;
 use chrono::*;
 
 /// Converts a normal string to a CString
@@ -147,7 +148,7 @@ impl Server {
     fn get_property_as_string(id: u64, property: VirtualServerProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
-            let res: Error = std::mem::transmute((ts3functions.as_ref()
+            let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_string)
                     (id, property as size_t, &mut name));
             match res {
@@ -160,7 +161,7 @@ impl Server {
     fn get_property_as_int(id: u64, property: VirtualServerProperties) -> Result<i32, Error> {
         unsafe {
             let mut number: c_int = 0;
-            let res: Error = std::mem::transmute((ts3functions.as_ref()
+            let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_int)
                     (id, property as size_t, &mut number));
             match res {
@@ -179,7 +180,7 @@ impl Server {
 
 		//TODO
 		let created = UTC::now();
-		let codec_encryption_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::CodecEncryptionMode))) };
+		let codec_encryption_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::CodecEncryptionMode))) };
 		let default_server_group = Permissions;
 		let default_channel_group = Permissions;
 		let default_channel_admin_group = Permissions;
@@ -194,10 +195,10 @@ impl Server {
 		let icon_id = try!(Server::get_property_as_int(id, VirtualServerProperties::IconId));
 		let reserved_slots = try!(Server::get_property_as_int(id, VirtualServerProperties::ReservedSlots));
 		let ask_for_privilegekey = try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) != 0;
-		let hostbanner_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };
+		let hostbanner_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };
 		let channel_temp_delete_delay_default = Duration::seconds(try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) as i64);
 		let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));
-		let hostmessage_mode = unsafe { std::mem::transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };
+		let hostmessage_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };
 
 		Ok(Server {
 			id: id,
@@ -262,6 +263,7 @@ impl Eq for Client {}
 
 
 // ********** TsApi **********
+/// The api functions provided by TeamSpeak
 static mut ts3functions: Option<Ts3Functions> = None;
 
 impl TsApi {
@@ -271,7 +273,7 @@ impl TsApi {
 
     pub fn log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error> {
         unsafe {
-            let res: Error = std::mem::transmute((ts3functions.as_ref()
+            let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").log_message)
                     (to_cstring!(message).as_ptr(),
                     severity, to_cstring!(channel).as_ptr(), 0));
@@ -284,7 +286,7 @@ impl TsApi {
 
     pub fn log_or_print(message: &str, channel: &str, severity: LogLevel) {
         if let Err(error) = TsApi::log_message(message, channel, severity) {
-            println!("Error {0:?} while printing '{1}' to {2} ({3:?})", error,
+            println!("Error {:?} while printing '{}' to {} ({:?})", error,
                 message, channel, severity);
         }
     }

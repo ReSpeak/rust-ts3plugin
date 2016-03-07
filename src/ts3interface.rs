@@ -6,7 +6,6 @@ use ts3plugin_sys::ts3functions::Ts3Functions;
 
 use ::plugin::Plugin;
 
-/// The api functions provided by TeamSpeak
 static mut TX: Option<*const Sender<FunctionCall>> = None;
 
 enum FunctionCall {
