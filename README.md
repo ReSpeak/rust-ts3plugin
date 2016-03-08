@@ -21,32 +21,39 @@ extern crate ts3plugin;
 
 use ts3plugin::*;
 
-struct MyTsPlugin;
+struct MyTsPlugin {
+	api: TsApi
+}
 
-impl MyTsPlugin
-{
-    fn new() -> MyTsPlugin
-    {
-        MyTsPlugin
+impl MyTsPlugin {
+    fn new(api: TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+        api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
+        Ok(Box::new(MyTsPlugin {
+        	api: api
+        }))
+        // Or return Err(InitError::Failure) on failure
     }
 }
 
-impl Plugin for MyTsPlugin
-{
-    fn init(&mut self) -> InitResult
-    {
-        println!("Inited");
-        InitResult::Success
+impl Plugin for MyTsPlugin {
+    fn get_api(&self) -> &TsApi {
+    	&self.api
     }
 
-    fn shutdown(&mut self)
-    {
-        println!("Shutdown");
+    fn get_mut_api(&mut self) -> &mut TsApi {
+    	&mut self.api
     }
 }
 
-create_plugin!(b"My Ts Plugin\0", b"0.1.0\0", b"My Name\0",
-    b"A wonderful tiny example plugin\0", ConfigureOffer::No, false, MyTsPlugin);
+impl Drop for MyTsPlugin {
+    fn drop(&mut self) {
+        self.api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
+    }
+}
+
+create_plugin!(
+    "My Ts Plugin", "0.1.0", "My name", "A wonderful tiny example plugin",
+    ConfigureOffer::No, false, MyTsPlugin);
 ```
 
 License
