@@ -1,3 +1,4 @@
+#[doc(no_inline)]
 pub use libc::{c_char, c_int};
 
 use std::thread::JoinHandle;
@@ -43,6 +44,7 @@ pub trait Plugin : Drop {
 /// Manager thread that calls all plugin functions.
 /// This variable is not intended for public use. It has to be public because
 /// it is used by `create_plugin!`.
+#[doc(hidden)]
 pub static mut MANAGER_THREAD: Option<*mut JoinHandle<()>> = None;
 
 /// Create a plugin. This macro has to be called once per library to create the
@@ -85,12 +87,15 @@ macro_rules! create_plugin {
 		static mut PLUGIN: Option<*mut $typename> = None;
 
         #[no_mangle]
-        pub unsafe extern fn ts3plugin_init() -> c_int {
+		#[doc(hidden)]
+        pub extern "C" fn ts3plugin_init() -> c_int {
             // Delete the old instance if one exists
-            if let Some(instance) = PLUGIN {
-                drop(Box::from_raw(instance));
-                PLUGIN = None;
-            }
+            unsafe {
+		        if let Some(instance) = PLUGIN {
+		            drop(Box::from_raw(instance));
+		            PLUGIN = None;
+		        }
+	        }
 
             // Create TsApi
             let mut api = $crate::TsApi::new();
@@ -101,16 +106,18 @@ macro_rules! create_plugin {
 				    match $typename::new(api) {
 				    	Ok(plugin) => {
 				    		let ptr = Box::into_raw(plugin);
-				    		PLUGIN = Some(ptr);
+				    		unsafe { PLUGIN = Some(ptr); }
 				    		let (transmitter, receiver) = std::sync::mpsc::channel();
 				    		// Start manager thread
-				    		MANAGER_THREAD = Some(Box::into_raw(Box::new(
-				    			std::thread::spawn(move || $crate::ts3interface::manager_thread(
-				    				&mut *PLUGIN.unwrap(), transmitter)))));
+				    		unsafe {
+								MANAGER_THREAD = Some(Box::into_raw(Box::new(
+									std::thread::spawn(move || $crate::ts3interface::manager_thread(
+										&mut *PLUGIN.unwrap(), transmitter)))));
+							}
 				    		// Wait until manager thread started up
 				    		match receiver.recv() {
 				    			Ok(_) => 0,
-				    			Err(error) => {
+				    			Err(error) => unsafe {
 				    				(*ptr).get_api().log_or_print(format!(
 				    					"Can't start manager thread: {:?}", error).as_ref(),
 				    					"rust-ts3plugin", $crate::LogLevel::Error);
@@ -137,28 +144,32 @@ macro_rules! create_plugin {
 		/// The result of this function has to be a null-terminated static string.
 		/// Can be called before init.
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_name() -> *const c_char {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_name() -> *const c_char {
 			(*PLUGIN_NAME).as_ptr()
 		}
 
 		/// The version of the plugin.
 		/// Can be called before init.
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_version() -> *const c_char {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_version() -> *const c_char {
 			(*PLUGIN_VERSION).as_ptr()
 		}
 
 		/// The author of the plugin.
 		/// Can be called before init.
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_author() -> *const c_char {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_author() -> *const c_char {
 			(*PLUGIN_AUTHOR).as_ptr()
 		}
 
 		/// The desription of the plugin.
 		/// Can be called before init.
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_description() -> *const c_char {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_description() -> *const c_char {
 			(*PLUGIN_DESCRIPTION).as_ptr()
 		}
 
@@ -166,7 +177,8 @@ macro_rules! create_plugin {
 		/// Can be called before init.
 		#[allow(non_snake_case)]
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_offersConfigure() -> c_int {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_offersConfigure() -> c_int {
 			$configurable as c_int
 		}
 
@@ -174,7 +186,8 @@ macro_rules! create_plugin {
 		/// Can be called before init.
 		#[allow(non_snake_case)]
 		#[no_mangle]
-		pub unsafe extern fn ts3plugin_requestAutoload() -> c_int {
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_requestAutoload() -> c_int {
 			if $autoload {
 				1
 			} else {
@@ -184,17 +197,20 @@ macro_rules! create_plugin {
 
         /// Called when the plugin should be unloaded.
         #[no_mangle]
-        pub unsafe extern fn ts3plugin_shutdown() {
-        	if let Some(plugin) = PLUGIN {
-	        	// Stop manager thread and wait for the end
-	        	$crate::ts3interface::quit_manager_thread();
-	        	let manager_thread = *Box::from_raw(MANAGER_THREAD.take().unwrap());
-	        	if let Err(error) = manager_thread.join() {
-	        		(*plugin).get_api().log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", $crate::LogLevel::Error);
-	        	}
-            	drop(Box::from_raw(plugin));
-	            PLUGIN = None;
-            }
+		#[doc(hidden)]
+        pub extern "C" fn ts3plugin_shutdown() {
+        	unsafe {
+		    	if let Some(plugin) = PLUGIN {
+			    	// Stop manager thread and wait for the end
+			    	$crate::ts3interface::quit_manager_thread();
+			    	let manager_thread = *Box::from_raw(MANAGER_THREAD.take().unwrap());
+			    	if let Err(error) = manager_thread.join() {
+			    		(*plugin).get_api().log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", $crate::LogLevel::Error);
+			    	}
+		        	drop(Box::from_raw(plugin));
+			        PLUGIN = None;
+		        }
+		    }
         }
     };
 }

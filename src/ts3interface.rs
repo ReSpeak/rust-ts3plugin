@@ -17,7 +17,8 @@ enum FunctionCall {
 	Quit
 }
 
-// Manager thread
+/// Manager thread
+#[doc(hidden)]
 pub fn manager_thread(plugin: &mut Plugin, main_transmitter: Sender<()>) {
 	let (tx, rx) = channel();
 	unsafe {
@@ -44,12 +45,14 @@ pub fn manager_thread(plugin: &mut Plugin, main_transmitter: Sender<()>) {
 			FunctionCall::ClientMove(server_id, client_connection_id, old_channel_id, new_channel_id, visibility, move_message) => {
 				if old_channel_id == ::ChannelId(0) {
 					// Client connected
-					let mut err = None;
-					if let Some(server) = plugin.get_mut_api().get_mut_server(server_id) {
+					let err = {
+						let server = plugin.get_mut_api().get_mut_server(server_id).unwrap();
 						if let Err(error) = server.add_connection(client_connection_id) {
-							err = Some(error)
+							Some(error)
+						} else {
+							None
 						}
-					}
+					};
 					if let Some(error) = err {
 						plugin.get_api().log_or_print(format!("Can't get connection information: {:?}", error).as_ref(), "rust-ts3plugin", ::LogLevel::Error)
 					}
@@ -69,6 +72,7 @@ pub fn manager_thread(plugin: &mut Plugin, main_transmitter: Sender<()>) {
 	}
 }
 
+#[doc(hidden)]
 pub unsafe fn quit_manager_thread() {
 	(*TX.unwrap()).send(FunctionCall::Quit).unwrap();
 }
@@ -77,24 +81,28 @@ pub unsafe fn quit_manager_thread() {
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern fn ts3plugin_apiVersion() -> c_int {
+#[doc(hidden)]
+pub extern "C" fn ts3plugin_apiVersion() -> c_int {
     20
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub unsafe extern fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
     ::ts3functions = Some(funs);
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub unsafe extern fn ts3plugin_onConnectStatusChangeEvent(server_id: u64, status: c_int, error: c_uint) {
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64, status: c_int, error: c_uint) {
 	(*TX.unwrap()).send(FunctionCall::ConnectStatusChange(::ServerId(server_id), transmute(status), transmute(error))).unwrap()
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub unsafe extern fn ts3plugin_onClientMoveEvent(server_id: u64, client_connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, client_connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ClientMove(::ServerId(server_id), ::ConnectionId(client_connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id), transmute(visibility), to_string!(move_message))).unwrap()
 }

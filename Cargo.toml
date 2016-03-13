@@ -2,6 +2,7 @@
 name = "ts3plugin"
 version = "0.1.0"
 authors = ["Flakebi <flakebi@t-online.de>"]
+build = "src/build.rs"
 
 [lib]
 name = "ts3plugin"
