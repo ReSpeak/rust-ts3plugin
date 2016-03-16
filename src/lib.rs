@@ -10,33 +10,21 @@
 //!
 //! use ts3plugin::*;
 //!
-//! struct MyTsPlugin {
-//! 	api: TsApi
-//! }
+//! struct MyTsPlugin;
 //!
 //! impl MyTsPlugin {
-//!     fn new(api: TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+//!     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
-//!         Ok(Box::new(MyTsPlugin {
-//!         	api: api
-//!         }))
+//!         Ok(Box::new(MyTsPlugin))
 //!         // Or return Err(InitError::Failure) on failure
 //!     }
 //! }
 //!
 //! impl Plugin for MyTsPlugin {
-//!     fn get_api(&self) -> &TsApi {
-//!     	&self.api
-//!     }
+//!     // Implement callbacks here
 //!
-//!     fn get_mut_api(&mut self) -> &mut TsApi {
-//!     	&mut self.api
-//!     }
-//! }
-//!
-//! impl Drop for MyTsPlugin {
-//!     fn drop(&mut self) {
-//!         self.api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
+//!     fn shutdown(&mut self, api: &TsApi) {
+//!         api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
 //!     }
 //! }
 //!
@@ -105,51 +93,6 @@ pub struct TsApi {
 }
 
 pub struct Permissions;
-
-/// Server properties that have to be fetched explicitely
-pub struct OptionalServerData {
-	welcome_message: String,
-	max_clients: i32,
-	clients_online: i32,
-	channels_online: i32,
-	client_connections: i32,
-	query_client_connections: i32,
-	query_clients_online: i32,
-	uptime: Duration,
-	password: bool,
-	max_download_total_bandwith: i32,
-	max_upload_total_bandwith: i32,
-	download_quota: i32,
-	upload_quota: i32,
-	month_bytes_downloaded: i32,
-	month_bytes_uploaded: i32,
-	total_bytes_downloaded: i32,
-	total_bytes_uploaded: i32,
-	complain_autoban_count: i32,
-	complain_autoban_time: Duration,
-	complain_remove_time: Duration,
-	min_clients_in_channel_before_forced_silence: i32,
-	antiflood_points_tick_reduce: i32,
-	antiflood_points_needed_command_block: i32,
-	antiflood_points_needed_ip_block: i32,
-	port: i32,
-	autostart: bool,
-	machine_id: i32,
-	needed_identity_security_level: i32,
-	log_client: bool,
-	log_query: bool,
-	log_channel: bool,
-	log_permissions: bool,
-	log_server: bool,
-	log_filetransfer: bool,
-	min_client_version: String,
-	total_packetloss_speech: i32,
-	total_packetloss_keepalive: i32,
-	total_packetloss_control: i32,
-	total_packetloss_total: i32,
-	total_ping: i32,
-	weblist_enabled: bool,
-}
 
 /// Server properties that are available at the start but not updated
 pub struct OutdatedServerData {
@@ -695,7 +638,12 @@ impl TsApi {
 	        Error::Ok => unsafe {
                 let mut counter = 0;
                 while *result.offset(counter) != 0 {
-                	try!(self.add_server(ServerId(*result.offset(counter))));
+                	match self.add_server(ServerId(*result.offset(counter))) {
+                		Err(error) => self.log_or_print(format!(
+							"Can't load server: {:?}", error).as_ref(),
+							"rust-ts3plugin", LogLevel::Error),
+                		Ok(_) => {}
+                	}
                     counter += 1;
                 }
 	        },

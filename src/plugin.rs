@@ -1,8 +1,6 @@
 #[doc(no_inline)]
 pub use libc::{c_char, c_int};
 
-use std::thread::JoinHandle;
-
 #[derive(Debug)]
 pub enum InitError {
     /// Initialisation failed, the plugin will be unloaded again
@@ -21,31 +19,24 @@ pub enum InitError {
 /// working TeamSpeak plugin you have to call the macro `create_plugin!`
 /// afterwards.
 #[allow(unused_variables)]
-pub trait Plugin : Drop {
+pub trait Plugin {
     // ************************** Required functions ***************************
     // Custom code called right after loading the plugin.
-    //fn new(api: ::TsApi) -> Result<Box<Self>, InitError>;
-
-    /// Get the `TsApi` that is used by this plugin.
-    fn get_api(&self) -> &::TsApi;
-    /// Get a mutable reference of the `TsApi` used by this plugin.
-    fn get_mut_api(&mut self) -> &mut ::TsApi;
+    //fn new(&api: ::TsApi) -> Result<Box<Self>, InitError>;
 
     /// If the connection status changes.
     /// If `status = ConnectStatus::Connecting`, the connection_id is not yet
     /// registered in the `TsApi`.
-    fn connect_status_change(&mut self, server_id: ::ServerId, status:
+    fn connect_status_change(&mut self, api: &mut ::TsApi, server_id: ::ServerId, status:
         ::ConnectStatus, error: ::Error) {}
 
-    fn client_connect_changed(&mut self, server_id: ::ServerId,
+    fn client_connect_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
     	client_connection_id: ::ConnectionId, connected: bool) {}
-}
 
-/// Manager thread that calls all plugin functions.
-/// This variable is not intended for public use. It has to be public because
-/// it is used by `create_plugin!`.
-#[doc(hidden)]
-pub static mut MANAGER_THREAD: Option<*mut JoinHandle<()>> = None;
+	/// Called if the plugin is disabled (either by the user or if TeamSpeak is
+	/// exiting).
+    fn shutdown(&mut self, api: &::TsApi) {}
+}
 
 /// Create a plugin. This macro has to be called once per library to create the
 /// function interface that is used by TeamSpeak.
@@ -82,45 +73,26 @@ macro_rules! create_plugin {
 	    	static ref PLUGIN_DESCRIPTION: std::ffi::CString = std::ffi::CString::new($description).unwrap();
 	    }
 
-		/// The used plugin.
-		/// Only used by the `create_plugin!` macro.
-		static mut PLUGIN: Option<*mut $typename> = None;
-
         #[no_mangle]
 		#[doc(hidden)]
         pub extern "C" fn ts3plugin_init() -> c_int {
-            // Delete the old instance if one exists
-            unsafe {
-		        if let Some(instance) = PLUGIN {
-		            drop(Box::from_raw(instance));
-		            PLUGIN = None;
-		        }
-	        }
-
             // Create TsApi
             let mut api = $crate::TsApi::new();
 		    // And load all currently available data.
             match api.load() {
             	Ok(_) => {
 				    // Create a new plugin instance
-				    match $typename::new(api) {
+				    match $typename::new(&api) {
 				    	Ok(plugin) => {
-				    		let ptr = Box::into_raw(plugin);
-				    		unsafe { PLUGIN = Some(ptr); }
 				    		let (transmitter, receiver) = std::sync::mpsc::channel();
 				    		// Start manager thread
-				    		unsafe {
-								MANAGER_THREAD = Some(Box::into_raw(Box::new(
-									std::thread::spawn(move || $crate::ts3interface::manager_thread(
-										&mut *PLUGIN.unwrap(), transmitter)))));
-							}
+							std::thread::spawn(move || $crate::ts3interface::manager_thread(
+								plugin, transmitter, api));
 				    		// Wait until manager thread started up
 				    		match receiver.recv() {
 				    			Ok(_) => 0,
-				    			Err(error) => unsafe {
-				    				(*ptr).get_api().log_or_print(format!(
-				    					"Can't start manager thread: {:?}", error).as_ref(),
-				    					"rust-ts3plugin", $crate::LogLevel::Error);
+				    			Err(error) => {
+				    				println!("Can't start manager thread: {:?}", error);
 				    				1
 				    			}
 				    		}
@@ -194,23 +166,5 @@ macro_rules! create_plugin {
 				0
 			}
 		}
-
-        /// Called when the plugin should be unloaded.
-        #[no_mangle]
-		#[doc(hidden)]
-        pub extern "C" fn ts3plugin_shutdown() {
-        	unsafe {
-		    	if let Some(plugin) = PLUGIN {
-			    	// Stop manager thread and wait for the end
-			    	$crate::ts3interface::quit_manager_thread();
-			    	let manager_thread = *Box::from_raw(MANAGER_THREAD.take().unwrap());
-			    	if let Err(error) = manager_thread.join() {
-			    		(*plugin).get_api().log_or_print(format!("Can't wait for manager thread: {:?}", error).as_ref(), "rust-ts3plugin", $crate::LogLevel::Error);
-			    	}
-		        	drop(Box::from_raw(plugin));
-			        PLUGIN = None;
-		        }
-		    }
-        }
     };
 }
