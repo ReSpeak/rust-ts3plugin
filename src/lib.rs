@@ -86,53 +86,12 @@ include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 // ******************** Structs ********************
 pub struct TsApi {
 	servers: Map<ServerId, Server>,
-
-	/// TeamSpeak waits for a function result so the api will panic if
-	/// someone trys to wait for a result coming from TeamSpeak.
-	no_wait: bool,
 }
 
 pub struct Permissions;
 
-/// Server properties that are available at the start but not updated
-pub struct OutdatedServerData {
-	hostmessage: String,
-	hostmessage_mode: HostmessageMode,
-}
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ServerId(u64);
-
-pub struct Server {
-	id: ServerId,
-	uid: String,
-	name: String,
-	name_phonetic: String,
-	platform: String,
-	version: String,
-	created: DateTime<UTC>,
-	codec_encryption_mode: CodecEncryptionMode,
-	default_server_group: Permissions,
-	default_channel_group: Permissions,
-	default_channel_admin_group: Permissions,
-	hostbanner_url: String,
-	hostbanner_gfx_url: String,
-	hostbanner_gfx_interval: Duration,
-	priority_speaker_dimm_modificator: i32,
-	hostbutton_tooltip: String,
-	hostbutton_url: String,
-	hostbutton_gfx_url: String,
-	icon_id: i32,
-	reserved_slots: i32,
-	ask_for_privilegekey: bool,
-	hostbanner_mode: HostbannerMode,
-	channel_temp_delete_delay_default: Duration,
-	visible_connections: Map<ConnectionId, Connection>,
-	outdated_data: OutdatedServerData,
-	optional_data: Option<OptionalServerData>,
-
-	no_wait: bool,
-}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ChannelId(u64);
@@ -140,8 +99,6 @@ pub struct ChannelId(u64);
 pub struct Channel {
 	id: ChannelId,
 	server_id: ServerId,
-
-	no_wait: bool,
 }
 
 pub struct OwnConnectionData {
@@ -253,8 +210,6 @@ pub struct Connection {
 	own_data: Option<OwnConnectionData>,
 	serverquery_data: Option<ServerqueryConnectionData>,
 	optional_data: Option<OptionalConnectionData>,
-
-	no_wait: bool,
 }
 
 
@@ -360,8 +315,6 @@ impl Server {
 				hostmessage_mode: hostmessage_mode,
 			},
 			optional_data: None,
-
-			no_wait: false,
 		})
 	}
 
@@ -597,8 +550,6 @@ impl Connection {
 			own_data: None,
 			serverquery_data: None,
 			optional_data: None,
-
-			no_wait: false,
 		})
 	}
 
@@ -619,8 +570,6 @@ impl TsApi {
 	pub fn new() -> TsApi {
 		TsApi {
 			servers: Map::new(),
-
-			no_wait: false,
 		}
 	}
 

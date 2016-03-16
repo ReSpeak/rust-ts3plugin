@@ -61,12 +61,55 @@ fn main() {
 		("total_ping", "i32"),
 		("weblist_enabled", "bool"),
 	];
+	// Outdated server data
+	let outdated_server_data = vec![
+		("hostmessage", "String"),
+		("hostmessage_mode", "HostmessageMode"),
+	];
+	// The real server data
+	let server = vec![
+		("id", "ServerId"),
+		("uid", "String"),
+		("name", "String"),
+		("name_phonetic", "String"),
+		("platform", "String"),
+		("version", "String"),
+		("created", "DateTime<UTC>"),
+		("codec_encryption_mode", "CodecEncryptionMode"),
+		("default_server_group", "Permissions"),
+		("default_channel_group", "Permissions"),
+		("default_channel_admin_group", "Permissions"),
+		("hostbanner_url", "String"),
+		("hostbanner_gfx_url", "String"),
+		("hostbanner_gfx_interval", "Duration"),
+		("hostbanner_mode", "HostbannerMode"),
+		("priority_speaker_dimm_modificator", "i32"),
+		("hostbutton_tooltip", "String"),
+		("hostbutton_url", "String"),
+		("hostbutton_gfx_url", "String"),
+		("icon_id", "i32"),
+		("reserved_slots", "i32"),
+		("ask_for_privilegekey", "bool"),
+		("channel_temp_delete_delay_default", "Duration"),
+	];
+
+	f.write_all("/// Server properties that are available at the start but not updated
+pub struct OutdatedServerData {".as_bytes()).unwrap();
+	f.write_all(create_struct(&outdated_server_data).as_bytes()).unwrap();
+	f.write_all("\n}".as_bytes()).unwrap();
+
 	f.write_all("/// Server properties that have to be fetched explicitely
-struct OptionalServerData {".as_bytes()).unwrap();
+pub struct OptionalServerData {".as_bytes()).unwrap();
 	f.write_all(create_struct(&optional_server_data).as_bytes()).unwrap();
 	f.write_all("\n}".as_bytes()).unwrap();
 
-	// Server itself
+	f.write_all("pub struct Server {".as_bytes()).unwrap();
+	f.write_all(create_struct(&server).as_bytes()).unwrap();
+	f.write_all("
+	visible_connections: Map<ConnectionId, Connection>,
+	outdated_data: OutdatedServerData,
+	optional_data: Option<OptionalServerData>,
+}".as_bytes()).unwrap();
 }
 
 fn create_struct(data: &Vec<(&str, &str)>) -> String {
