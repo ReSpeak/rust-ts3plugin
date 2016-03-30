@@ -31,10 +31,10 @@ pub trait Plugin {
         ::ConnectStatus, error: ::Error) {}
 
     fn client_connect_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-    	client_connection_id: ::ConnectionId, connected: bool) {}
+        client_connection_id: ::ConnectionId, connected: bool) {}
 
-	/// Called if the plugin is disabled (either by the user or if TeamSpeak is
-	/// exiting).
+    /// Called if the plugin is disabled (either by the user or if TeamSpeak is
+    /// exiting).
     fn shutdown(&mut self, api: &::TsApi) {}
 }
 
@@ -66,105 +66,105 @@ pub trait Plugin {
 macro_rules! create_plugin {
     ($name: expr, $version: expr, $author: expr, $description: expr,
         $configurable: expr, $autoload: expr, $typename: ident) => {
-	    lazy_static! {
-	    	static ref PLUGIN_NAME: std::ffi::CString = std::ffi::CString::new($name).unwrap();
-	    	static ref PLUGIN_VERSION: std::ffi::CString = std::ffi::CString::new($version).unwrap();
-	    	static ref PLUGIN_AUTHOR: std::ffi::CString = std::ffi::CString::new($author).unwrap();
-	    	static ref PLUGIN_DESCRIPTION: std::ffi::CString = std::ffi::CString::new($description).unwrap();
-	    }
+        lazy_static! {
+            static ref PLUGIN_NAME: std::ffi::CString = std::ffi::CString::new($name).unwrap();
+            static ref PLUGIN_VERSION: std::ffi::CString = std::ffi::CString::new($version).unwrap();
+            static ref PLUGIN_AUTHOR: std::ffi::CString = std::ffi::CString::new($author).unwrap();
+            static ref PLUGIN_DESCRIPTION: std::ffi::CString = std::ffi::CString::new($description).unwrap();
+        }
 
         #[no_mangle]
-		#[doc(hidden)]
+        #[doc(hidden)]
         pub extern "C" fn ts3plugin_init() -> c_int {
             // Create TsApi
             let mut api = $crate::TsApi::new();
-		    // And load all currently available data.
+            // And load all currently available data.
             match api.load() {
-            	Ok(_) => {
-				    // Create a new plugin instance
-				    match $typename::new(&api) {
-				    	Ok(plugin) => {
-				    		let (transmitter, receiver) = std::sync::mpsc::channel();
-				    		// Start manager thread
-							std::thread::spawn(move || $crate::ts3interface::manager_thread(
-								plugin, transmitter, api));
-				    		// Wait until manager thread started up
-				    		match receiver.recv() {
-				    			Ok(_) => 0,
-				    			Err(error) => {
-				    				println!("Can't start manager thread: {:?}", error);
-				    				1
-				    			}
-				    		}
-				    	},
-				    	Err(error) => match error {
-							$crate::InitError::Failure =>           1,
-							$crate::InitError::FailureNoMessage => -2
-				    	}
-				    }
-			    },
-			    Err(error) => {
-			    	api.log_or_print(format!(
-    					"Can't create TsApi: {:?}", error).as_ref(),
-    					"rust-ts3plugin", $crate::LogLevel::Error);
-			    	1
-			    }
-		    }
+                Ok(_) => {
+                    // Create a new plugin instance
+                    match $typename::new(&api) {
+                        Ok(plugin) => {
+                            let (transmitter, receiver) = std::sync::mpsc::channel();
+                            // Start manager thread
+                            std::thread::spawn(move || $crate::ts3interface::manager_thread(
+                                plugin, transmitter, api));
+                            // Wait until manager thread started up
+                            match receiver.recv() {
+                                Ok(_) => 0,
+                                Err(error) => {
+                                    println!("Can't start manager thread: {:?}", error);
+                                    1
+                                }
+                            }
+                        },
+                        Err(error) => match error {
+                            $crate::InitError::Failure =>           1,
+                            $crate::InitError::FailureNoMessage => -2
+                        }
+                    }
+                },
+                Err(error) => {
+                    api.log_or_print(format!(
+                        "Can't create TsApi: {:?}", error).as_ref(),
+                        "rust-ts3plugin", $crate::LogLevel::Error);
+                    1
+                }
+            }
         }
 
-		/// Unique name identifying this plugin.
-		/// The result of this function has to be a null-terminated static string.
-		/// Can be called before init.
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_name() -> *const c_char {
-			(*PLUGIN_NAME).as_ptr()
-		}
+        /// Unique name identifying this plugin.
+        /// The result of this function has to be a null-terminated static string.
+        /// Can be called before init.
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_name() -> *const c_char {
+            (*PLUGIN_NAME).as_ptr()
+        }
 
-		/// The version of the plugin.
-		/// Can be called before init.
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_version() -> *const c_char {
-			(*PLUGIN_VERSION).as_ptr()
-		}
+        /// The version of the plugin.
+        /// Can be called before init.
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_version() -> *const c_char {
+            (*PLUGIN_VERSION).as_ptr()
+        }
 
-		/// The author of the plugin.
-		/// Can be called before init.
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_author() -> *const c_char {
-			(*PLUGIN_AUTHOR).as_ptr()
-		}
+        /// The author of the plugin.
+        /// Can be called before init.
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_author() -> *const c_char {
+            (*PLUGIN_AUTHOR).as_ptr()
+        }
 
-		/// The desription of the plugin.
-		/// Can be called before init.
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_description() -> *const c_char {
-			(*PLUGIN_DESCRIPTION).as_ptr()
-		}
+        /// The desription of the plugin.
+        /// Can be called before init.
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_description() -> *const c_char {
+            (*PLUGIN_DESCRIPTION).as_ptr()
+        }
 
-		/// If the plugin offers the possibility to be configured by the user.
-		/// Can be called before init.
-		#[allow(non_snake_case)]
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_offersConfigure() -> c_int {
-			$configurable as c_int
-		}
+        /// If the plugin offers the possibility to be configured by the user.
+        /// Can be called before init.
+        #[allow(non_snake_case)]
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_offersConfigure() -> c_int {
+            $configurable as c_int
+        }
 
-		/// If the plugin should be loaded automatically.
-		/// Can be called before init.
-		#[allow(non_snake_case)]
-		#[no_mangle]
-		#[doc(hidden)]
-		pub extern "C" fn ts3plugin_requestAutoload() -> c_int {
-			if $autoload {
-				1
-			} else {
-				0
-			}
-		}
+        /// If the plugin should be loaded automatically.
+        /// Can be called before init.
+        #[allow(non_snake_case)]
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn ts3plugin_requestAutoload() -> c_int {
+            if $autoload {
+                1
+            } else {
+                0
+            }
+        }
     };
 }
