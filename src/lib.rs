@@ -12,15 +12,13 @@
 //!
 //! struct MyTsPlugin;
 //!
-//! impl MyTsPlugin {
+//! impl Plugin for MyTsPlugin {
 //!     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
 //!         Ok(Box::new(MyTsPlugin))
 //!         // Or return Err(InitError::Failure) on failure
 //!     }
-//! }
 //!
-//! impl Plugin for MyTsPlugin {
 //!     // Implement callbacks here
 //!
 //!     fn shutdown(&mut self, api: &TsApi) {
@@ -250,81 +248,9 @@ impl Server {
         }
     }
 
-	fn new(id: ServerId) -> Result<Server, Error> {
-		let uid = try!(Server::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));
-		let name = try!(Server::get_property_as_string(id, VirtualServerProperties::Name));
-		let name_phonetic = try!(Server::get_property_as_string(id, VirtualServerProperties::NamePhonetic));
-		let platform = try!(Server::get_property_as_string(id, VirtualServerProperties::Platform));
-		let version = try!(Server::get_property_as_string(id, VirtualServerProperties::Version));
-
-		//TODO
-		let created = UTC::now();
-
-		let codec_encryption_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::CodecEncryptionMode))) };
-
-		//TODO
-		let default_server_group = Permissions;
-		let default_channel_group = Permissions;
-		let default_channel_admin_group = Permissions;
-
-		let hostbanner_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbannerUrl));
-		let hostbanner_gfx_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbannerGfxUrl));
-		let hostbanner_gfx_interval = Duration::seconds(try!(Server::get_property_as_int(id, VirtualServerProperties::PrioritySpeakerDimmModificator)) as i64);
-		let priority_speaker_dimm_modificator = try!(Server::get_property_as_int(id, VirtualServerProperties::PrioritySpeakerDimmModificator));
-		let hostbutton_tooltip = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonTooltip));
-		let hostbutton_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonUrl));
-		let hostbutton_gfx_url = try!(Server::get_property_as_string(id, VirtualServerProperties::HostbuttonGfxUrl));
-		let icon_id = try!(Server::get_property_as_int(id, VirtualServerProperties::IconId));
-		let reserved_slots = try!(Server::get_property_as_int(id, VirtualServerProperties::ReservedSlots));
-		let ask_for_privilegekey = try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) != 0;
-		let hostbanner_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };
-		let channel_temp_delete_delay_default = Duration::seconds(try!(Server::get_property_as_int(id, VirtualServerProperties::AskForPrivilegekey)) as i64);
-		let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));
-		let hostmessage_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };
-
-		//TODO Query currently visible connections on this server
-		let visible_connections = Map::new();
-
-		Ok(Server {
-			id: id,
-			uid: uid,
-			name: name,
-			name_phonetic: name_phonetic,
-			platform: platform,
-			version: version,
-			created: created,
-			codec_encryption_mode: codec_encryption_mode,
-			default_server_group: default_server_group,
-			default_channel_group: default_channel_group,
-			default_channel_admin_group: default_channel_admin_group,
-			hostbanner_url: hostbanner_url,
-			hostbanner_gfx_url: hostbanner_gfx_url,
-			hostbanner_gfx_interval: hostbanner_gfx_interval,
-			priority_speaker_dimm_modificator: priority_speaker_dimm_modificator,
-			hostbutton_tooltip: hostbutton_tooltip,
-			hostbutton_url: hostbutton_url,
-			hostbutton_gfx_url: hostbutton_gfx_url,
-			icon_id: icon_id,
-			reserved_slots: reserved_slots,
-			ask_for_privilegekey: ask_for_privilegekey,
-			hostbanner_mode: hostbanner_mode,
-			channel_temp_delete_delay_default: channel_temp_delete_delay_default,
-			visible_connections: visible_connections,
-			outdated_data: OutdatedServerData {
-				hostmessage: hostmessage,
-				hostmessage_mode: hostmessage_mode,
-			},
-			optional_data: None,
-		})
-	}
-
 	fn add_connection(&mut self, connection_id: ConnectionId) -> Result<(), Error> {
 		self.visible_connections.insert(connection_id, try!(Connection::new(self.id, connection_id)));
 		Ok(())
-	}
-
-	pub fn get_name(&self) -> &String {
-		&self.name
 	}
 
     pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {

@@ -22,7 +22,7 @@ pub enum InitError {
 pub trait Plugin {
     // ************************** Required functions ***************************
     // Custom code called right after loading the plugin.
-    //fn new(&api: ::TsApi) -> Result<Box<Self>, InitError>;
+    fn new(&api: &::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
 
     /// If the connection status changes.
     /// If `status = ConnectStatus::Connecting`, the connection_id is not yet
