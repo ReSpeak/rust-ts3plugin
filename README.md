@@ -21,33 +21,19 @@ extern crate ts3plugin;
 
 use ts3plugin::*;
 
-struct MyTsPlugin {
-	api: TsApi
-}
-
-impl MyTsPlugin {
-    fn new(api: TsApi) -> Result<Box<MyTsPlugin>, InitError> {
-        api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
-        Ok(Box::new(MyTsPlugin {
-        	api: api
-        }))
-        // Or return Err(InitError::Failure) on failure
-    }
-}
+struct MyTsPlugin;
 
 impl Plugin for MyTsPlugin {
-    fn get_api(&self) -> &TsApi {
-    	&self.api
+    fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+        api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
+        Ok(Box::new(MyTsPlugin))
+        // Or return Err(InitError::Failure) on failure
     }
 
-    fn get_mut_api(&mut self) -> &mut TsApi {
-    	&mut self.api
-    }
-}
+    // Implement callbacks here
 
-impl Drop for MyTsPlugin {
-    fn drop(&mut self) {
-        self.api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
+    fn shutdown(&mut self, api: &TsApi) {
+        api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
     }
 }
 
