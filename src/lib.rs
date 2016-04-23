@@ -35,6 +35,8 @@
 
 #![allow(dead_code)]
 #![feature(macro_reexport)]
+#![feature(plugin)]
+#![plugin(clippy)]
 
 extern crate libc;
 extern crate chrono;
@@ -235,145 +237,6 @@ impl Connection {
             }
         }
     }
-
-    fn new(server_id: ServerId, id: ConnectionId) -> Result<Connection, Error> {
-        // ConnectionProperties
-        let ping = Duration::milliseconds(try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::Ping)) as i64);
-        let ping_deciation = Duration::milliseconds(try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PingDeciation)) as i64);
-        let connected_time = Duration::seconds(try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ConnectedTime)) as i64);
-        let idle_time = Duration::seconds(try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::IdleTime)) as i64);
-        let client_ip = try!(Connection::get_connection_property_as_string(server_id, id, ConnectionProperties::ClientIp));
-        let client_port = try!(Connection::get_connection_property_as_string(server_id, id, ConnectionProperties::ClientPort));
-        // Network
-        let packets_sent_speech = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsSentSpeech));
-        let packets_sent_keepalive = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsSentKeepalive));
-        let packets_sent_control = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsSentControl));
-        let packets_sent_total = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsSentTotal));
-        let bytes_sent_speech = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesSentSpeech));
-        let bytes_sent_keepalive = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesSentKeepalive));
-        let bytes_sent_control = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesSentControl));
-        let bytes_sent_total = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesSentTotal));
-        let packets_received_speech = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsReceivedSpeech));
-        let packets_received_keepalive = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsReceivedKeepalive));
-        let packets_received_control = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsReceivedControl));
-        let packets_received_total = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketsReceivedTotal));
-        let bytes_received_speech = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesReceivedSpeech));
-        let bytes_received_keepalive = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesReceivedKeepalive));
-        let bytes_received_control = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesReceivedControl));
-        let bytes_received_total = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::BytesReceivedTotal));
-        let packetloss_speech = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketlossSpeech));
-        let packetloss_keepalive = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketlossKeepalive));
-        let packetloss_control = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketlossControl));
-        let packetloss_total = try!(Connection::get_connection_property_as_uint64(server_id, id, ConnectionProperties::PacketlossTotal));
-        // End network
-
-        // ClientProperties
-        let uid = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::UniqueIdentifier));
-        let name = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::Nickname));
-        let talking = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::FlagTalking))) };
-        let input_muted = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::InputMuted))) };
-        let output_muted = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::OutputMuted))) };
-        let output_only_muted = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::OutputOnlyMuted))) };
-        let input_hardware = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::InputHardware))) };
-        let output_hardware = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::OutputHardware))) };
-        let default_channel_password = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::DefaultChannelPassword));
-        let server_password = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::ServerPassword));
-        let is_muted = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IsMuted)) != 0;
-        let is_recording = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IsRecording)) != 0;
-        let volume_modificator = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::VolumeModificator));
-        let version_sign = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::VersionSign));
-        let away = unsafe { transmute(try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::Away))) };
-        let away_message = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::AwayMessage));
-        let flag_avatar = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::FlagAvatar)) != 0;
-        let description = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::Description));
-        let is_talker = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IsTalker)) != 0;
-        let is_priority_speaker = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IsPrioritySpeaker)) != 0;
-        let has_unread_messages = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::UnreadMessages)) != 0;
-        let phonetic_name = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::NicknamePhonetic));
-        let needed_serverquery_view_power = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::NeededServerqueryViewPower));
-        let icon_id = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IconId));
-        let is_channel_commander = try!(Connection::get_client_property_as_int(server_id, id, ClientProperties::IsChannelCommander)) != 0;
-        let country = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::Country));
-        let badges = try!(Connection::get_client_property_as_string(server_id, id, ClientProperties::Badges));
-
-        Ok(Connection {
-            id: id,
-            server_id: server_id,
-            // ConnectionProperties
-            ping: ping,
-            ping_deciation: ping_deciation,
-            connected_time: connected_time,
-            idle_time: idle_time,
-            client_ip: client_ip,
-            client_port: client_port,
-            // Network
-            packets_sent_speech: packets_sent_speech,
-            packets_sent_keepalive: packets_sent_keepalive,
-            packets_sent_control: packets_sent_control,
-            packets_sent_total: packets_sent_total,
-            bytes_sent_speech: bytes_sent_speech,
-            bytes_sent_keepalive: bytes_sent_keepalive,
-            bytes_sent_control: bytes_sent_control,
-            bytes_sent_total: bytes_sent_total,
-            packets_received_speech: packets_received_speech,
-            packets_received_keepalive: packets_received_keepalive,
-            packets_received_control: packets_received_control,
-            packets_received_total: packets_received_total,
-            bytes_received_speech: bytes_received_speech,
-            bytes_received_keepalive: bytes_received_keepalive,
-            bytes_received_control: bytes_received_control,
-            bytes_received_total: bytes_received_total,
-            packetloss_speech: packetloss_speech,
-            packetloss_keepalive: packetloss_keepalive,
-            packetloss_control: packetloss_control,
-            packetloss_total: packetloss_total,
-            // End network
-
-            // ClientProperties
-            uid: uid,
-            name: name,
-            talking: talking,
-            input_muted: input_muted,
-            output_muted: output_muted,
-            output_only_muted: output_only_muted,
-            input_hardware: input_hardware,
-            output_hardware: output_hardware,
-            default_channel_password: default_channel_password,
-            server_password: server_password,
-            is_muted: is_muted,
-            is_recording: is_recording,
-            volume_modificator: volume_modificator,
-            version_sign: version_sign,
-            away: away,
-            away_message: away_message,
-            flag_avatar: flag_avatar,
-            description: description,
-            is_talker: is_talker,
-            is_priority_speaker: is_priority_speaker,
-            has_unread_messages: has_unread_messages,
-            phonetic_name: phonetic_name,
-            needed_serverquery_view_power: needed_serverquery_view_power,
-            icon_id: icon_id,
-            is_channel_commander: is_channel_commander,
-            country: country,
-            badges: badges,
-            //TODO
-            database_id: None,
-            channel_group_id: None,
-            server_groups: None,
-            talk_power: None,
-            talk_request: None,
-            talk_request_message: None,
-            channel_group_inherited_channel_id: None,
-            own_data: None,
-            serverquery_data: None,
-            optional_data: None,
-        })
-    }
-
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
 }
 
 
@@ -381,14 +244,20 @@ impl Connection {
 /// The api functions provided by TeamSpeak
 static mut ts3functions: Option<Ts3Functions> = None;
 
+impl Default for TsApi {
+    fn default() -> TsApi {
+        TsApi {
+            servers: Map::new(),
+        }
+    }
+}
+
 impl TsApi {
     /// Create a new TsApi instance without loading anything.
     /// This will be called from the `create_plugin!` macro.
     /// This function is not meant for public use.
     pub fn new() -> TsApi {
-        TsApi {
-            servers: Map::new(),
-        }
+        Self::default()
     }
 
     /// Load all currently connected server and there data.
@@ -407,11 +276,10 @@ impl TsApi {
                 while *result.offset(counter) != 0 {
                     match self.add_server(ServerId(*result.offset(counter))) {
                         // Ignore tabs without connected servers
-                        Err(Error::NotConnected) => {},
+                        Err(Error::NotConnected) | Ok(_) => {},
                         Err(error) => self.log_or_print(format!(
                             "Can't load server: {:?}", error).as_ref(),
                             "rust-ts3plugin", LogLevel::Error),
-                        Ok(_) => {}
                     }
                     counter += 1;
                 }

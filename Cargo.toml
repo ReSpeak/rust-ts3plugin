@@ -9,6 +9,7 @@ name = "ts3plugin"
 
 [dependencies]
 chrono = "*"
+clippy = "*"
 lazy_static = "*"
 libc = "*"
 

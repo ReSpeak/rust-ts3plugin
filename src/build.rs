@@ -10,29 +10,128 @@ use std::slice::SliceConcatExt;
 
 type Map<K, V> = BTreeMap<K, V>;
 
+//TODO replace &'a str with Cow<'a, str>
 #[derive(Default, Clone)]
 struct Property<'a> {
     name: &'a str,
     type_s: &'a str,
     documentation: &'a str,
+    initialize: bool,
+    /// Use a fixed function
+    method_name: Option<&'a str>,
+    /// The name that is used to initialize this value: enum_name::value_name
+    enum_name: &'a str,
+    value_name: Option<&'a str>,
+    /// Map type_s → used function
+    functions: Map<&'a str, &'a str>,
+    /// Types that are transmutable, the standard type that is taken is int
+    transmutable: Vec<&'a str>,
+    /// Arguments passed to the function
+    default_args: &'a str,
 }
 
 impl<'a> Property<'a> {
-    fn new() -> Property<'a> {
-        Self::default()
+    fn create_attribute(&self) -> String {
+        let mut s = String::new();
+        if !self.documentation.is_empty() {
+            s.push_str(self.documentation.lines()
+                .map(|l| format!("/// {}\n", l)).collect::<String>().as_str());
+        }
+        s.push_str(format!("{}: {},\n", self.name, self.type_s).as_str());
+        s
+    }
+
+    fn create_getter(&self) -> String {
+        let is_ref_type = ["String", "Permissions"].contains(&self.type_s) || self.type_s.starts_with("Option<");
+        let mut s = String::new();
+        s.push_str(format!("pub fn get_{}(&self) -> ", self.name).as_str());
+        if is_ref_type {
+            s.push('&');
+        }
+        s.push_str(format!("{} {{\n", self.type_s).as_str());
+        let mut body = String::new();
+        s.push_str(indent("", 1).as_str());
+        if is_ref_type {
+            body.push('&');
+        }
+        body.push_str(format!("self.{}\n", self.name).as_str());
+        s.push_str(format!("{}}}\n", indent(body, 1)).as_str());
+        s
+    }
+
+    fn create_initialisation(&self) -> String {
+        if !self.initialize {
+            return String::new();
+        }
+        let value_name = self.value_name.map(|s| s.to_string()).unwrap_or(to_pascal_case(self.name));
+        let mut s = String::new();
+        // Ignore unknown types
+        if let Some(function) = self.method_name {
+            // Special defined function
+            s.push_str(format!("try!(Self::{}({}{}::{}))", function, self.default_args,
+                self.enum_name, value_name).as_str());
+        } else if let Some(function) = self.functions.get(self.type_s) {
+            // From function list
+            s.push_str(format!("try!(Self::{}({}{}::{}))", function, self.default_args,
+                self.enum_name, value_name).as_str());
+        } else if self.transmutable.contains(&self.type_s) {
+            // Try to get an int
+            for t in &["i32", "u64"] {
+                if let Some(function) = self.functions.get(t) {
+                    s.push_str(format!("unsafe {{ transmute(try!(Self::{}({}{}::{}))) }}", function, self.default_args,
+                        self.enum_name, value_name).as_str());
+                }
+            }
+        } else {
+            match self.type_s {
+                "Duration" => {
+                    // Try to get an u64
+                    let function = if let Some(f) = self.functions.get("u64") {
+                        f
+                    } else if let Some(f) = self.functions.get("i32") {
+                        f
+                    } else {
+                        "get_property_as_int"
+                    };
+                    s.push_str(format!("Duration::seconds(try!(Self::{}({}{}::{})) as i64)",
+                        function, self.default_args, self.enum_name, value_name).as_str())
+                },
+                "bool" => {
+                    for t in &["i32", "u64"] {
+                        if let Some(function) = self.functions.get(t) {
+                            s.push_str(format!("try!(Self::{}({}{}::{})) != 0", function,
+                                self.default_args, self.enum_name, value_name).as_str())
+                        }
+                    }
+                }
+                _ => if self.type_s.starts_with("Option<") {
+                    s.push_str("None")
+                }
+            }
+        }
+        s
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct PropertyBuilder<'a> {
     name: &'a str,
     type_s: &'a str,
     documentation: &'a str,
+    initialize: bool,
+    method_name: Option<&'a str>,
+    enum_name: &'a str,
+    value_name: Option<&'a str>,
+    functions: Map<&'a str, &'a str>,
+    transmutable: Vec<&'a str>,
+    default_args: &'a str,
 }
 
 impl<'a> PropertyBuilder<'a> {
     fn new() -> PropertyBuilder<'a> {
-        Self::default()
+        let mut result = Self::default();
+        result.initialize = true;
+        result
     }
 
     fn name(&mut self, name: &'a str) -> &mut PropertyBuilder<'a> {
@@ -50,11 +149,53 @@ impl<'a> PropertyBuilder<'a> {
         self
     }
 
+    fn initialize(&mut self, initialize: bool) -> &mut PropertyBuilder<'a> {
+        self.initialize = initialize;
+        self
+    }
+
+    fn method_name(&mut self, method_name: &'a str) -> &mut PropertyBuilder<'a> {
+        self.method_name = Some(method_name);
+        self
+    }
+
+    fn enum_name(&mut self, enum_name: &'a str) -> &mut PropertyBuilder<'a> {
+        self.enum_name = enum_name;
+        self
+    }
+
+    fn value_name(&mut self, value_name: &'a str) -> &mut PropertyBuilder<'a> {
+        self.value_name = Some(value_name);
+        self
+    }
+
+    fn functions(&mut self, functions: Map<&'a str, &'a str>) -> &mut PropertyBuilder<'a> {
+        self.functions = functions;
+        self
+    }
+
+    fn transmutable(&mut self, transmutable: Vec<&'a str>) -> &mut PropertyBuilder<'a> {
+        self.transmutable = transmutable;
+        self
+    }
+
+    fn default_args(&mut self, default_args: &'a str) -> &mut PropertyBuilder<'a> {
+        self.default_args = default_args;
+        self
+    }
+
     fn finalize(&self) -> Property<'a> {
         Property {
             name: self.name,
             type_s: self.type_s,
             documentation: self.documentation,
+            initialize: self.initialize,
+            method_name: self.method_name,
+            enum_name: self.enum_name,
+            value_name: self.value_name,
+            functions: self.functions.clone(),
+            transmutable: self.transmutable.clone(),
+            default_args: self.default_args,
         }
     }
 }
@@ -72,6 +213,8 @@ struct Struct<'a> {
     extra_initialisation: &'a str,
     /// Code that will be inserted into the creation of the struct
     extra_creation: &'a str,
+    /// Arguments that are taken by the constructor
+    constructor_args: &'a str,
 }
 
 #[derive(Default)]
@@ -82,6 +225,7 @@ struct StructBuilder<'a> {
     extra_attributes: &'a str,
     extra_initialisation: &'a str,
     extra_creation: &'a str,
+    constructor_args: &'a str,
 }
 
 impl<'a> StructBuilder<'a> {
@@ -119,15 +263,21 @@ impl<'a> StructBuilder<'a> {
         self
     }
 
-    fn finalize(&mut self) -> Struct<'a> {
+    fn constructor_args(&mut self, constructor_args: &'a str) -> &mut StructBuilder<'a> {
+        self.constructor_args = constructor_args;
+        self
+    }
+
+    fn finalize(&self) -> Struct<'a> {
         Struct {
             name: self.name,
             documentation: self.documentation,
             // Move the contents of the properties
-            properties: self.properties.drain(..).collect(),
+            properties: self.properties.clone(),
             extra_attributes: self.extra_attributes,
             extra_initialisation: self.extra_initialisation,
             extra_creation: self.extra_creation,
+            constructor_args: self.constructor_args,
         }
     }
 }
@@ -136,18 +286,15 @@ impl<'a> Struct<'a> {
     fn create_struct(&self) -> String {
         let mut s = String::new();
         for prop in &self.properties {
-            if !prop.documentation.is_empty() {
-                write!(s, "/// {}\n", prop.documentation).unwrap();
-            }
-            write!(s, "{}: {},\n", prop.name, prop.type_s).unwrap();
+            s.push_str(prop.create_attribute().as_str());
         }
         let mut result = String::new();
         if !self.documentation.is_empty() {
-            write!(result, "/// {}\n", self.documentation).unwrap();
+            result.push_str(format!("/// {}\n", self.documentation).as_str());
         }
-        write!(result, "pub struct {} {{\n{}", self.name, indent(s.as_ref(), 1)).unwrap();
+        result.push_str(format!("pub struct {} {{\n{}", self.name, indent(s, 1)).as_str());
         if !self.extra_attributes.is_empty() {
-            write!(result, "\n{}", indent(self.extra_attributes, 1)).unwrap();
+            result.push_str(format!("\n{}", indent(self.extra_attributes, 1)).as_str());
         }
         result.push_str("}\n\n");
         result
@@ -156,42 +303,48 @@ impl<'a> Struct<'a> {
     fn create_impl(&self) -> String {
         let mut s = String::new();
         for prop in &self.properties {
-            let is_ref_type = ["String", "Permissions"].contains(&prop.type_s);
-            write!(s, "pub fn get_{}(&self) -> ", prop.name).unwrap();
-            if is_ref_type {
-                s.write_str("&").unwrap();
-            }
-            write!(s, "{} {{\n    ", prop.type_s).unwrap();
-            if is_ref_type {
-                s.write_str("&").unwrap();
-            }
-            write!(s, "self.{}\n}}\n", prop.name).unwrap();
+            s.push_str(prop.create_getter().as_str());
         }
         let mut result = String::new();
-        write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s.as_ref(), 1)).unwrap();
+        write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
         result
     }
 
-    fn constructor_variables(&self) -> String {
-        let mut s = String::new();
-        //TODO
-        /*for prop in &self.properties() {
-            let mut p = String::new();
-            // Ignore unknown types
-            if let Some(function) = functions.get(var_type) {
-                write!(ps, "try!({}::{}({}{}::{}));", struct_name, function, args, properties_name, to_pascal_case(name)).unwrap();
-            } else {
-                match var_type {
-                    "Duration" => { write!(p, "Duration::seconds(try!({}::{}({}{}::{})) as i64);", struct_name, "get_property_as_int", args, properties_name, to_pascal_case(name)).unwrap(); }
-                    "bool" => { write!(p, "try!({}::{}({}{}::{})) != 0;", struct_name, "get_property_as_int", args, properties_name, to_pascal_case(name)).unwrap(); }
-                    _ => {}
-                }
-            }
+    /// struct_name: Name of the struct
+    /// properties_name: Name of the properties enum
+    /// args: Base args (id) to get properties
+    fn create_constructor(&self) -> String {
+        let mut inits = String::new();
+        // Initialisation
+        if !self.extra_initialisation.is_empty() {
+            inits.push_str(self.extra_initialisation);
+            inits.push('\n');
+        }
+        for prop in &self.properties {
+            let p = prop.create_initialisation();
             if !p.is_empty() {
-                write!(s, "\n        let {} = {}", name, p).unwrap();
+                inits.push_str(format!("let {} = {};\n", prop.name, p).as_str());
             }
-        }*/
-        s
+        }
+        // Creation
+        let mut creats = String::new();
+        for prop in &self.properties {
+            creats.push_str(format!("{0}: {0},\n", prop.name).as_str());
+        }
+        if !self.extra_creation.is_empty() {
+            creats.push('\n');
+            creats.push_str(self.extra_creation);
+        }
+
+        let mut result = String::new();
+        write!(result, "impl {0} {{\n\
+               \tfn new({1}) -> Result<{0}, Error> {{\n\
+               {2}\n\
+               \t\tOk({0} {{\n\
+               {3}\
+               \t\t}})\n\
+               \t}}\n}}\n\n", self.name, self.constructor_args, indent(inits, 2), indent(creats, 3)).unwrap();
+        result
     }
 }
 
@@ -203,90 +356,123 @@ fn create_server(f: &mut Write) {
         m.insert("String", "get_property_as_string");
         m
     };
+    let transmutable = vec!["CodecEncryptionMode"];
 
+    let mut builder = PropertyBuilder::new();
+    builder.functions(default_functions)
+        .transmutable(transmutable)
+        .default_args("id, ")
+        .enum_name("VirtualServerProperties");
+    let mut builder_string = builder.clone();
+    builder_string.type_s("String");
+    let mut builder_i32 = builder.clone();
+    builder_i32.type_s("i32");
     // Optional server data
     let optional_server_data = StructBuilder::new().name("OptionalServerData")
         .documentation("Server properties that have to be fetched explicitely")
         .properties(vec![
-            PropertyBuilder::new().name("welcome_message").type_s("String").finalize(),
-            PropertyBuilder::new().name("max_clients").type_s("i32").finalize(),
-            PropertyBuilder::new().name("clients_online").type_s("i32").finalize(),
-            PropertyBuilder::new().name("channels_online").type_s("i32").finalize(),
-            PropertyBuilder::new().name("client_connections").type_s("i32").finalize(),
-            PropertyBuilder::new().name("query_client_connections").type_s("i32").finalize(),
-            PropertyBuilder::new().name("query_clients_online").type_s("i32").finalize(),
-            PropertyBuilder::new().name("uptime").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("password").type_s("bool").finalize(),
-            PropertyBuilder::new().name("max_download_total_bandwith").type_s("i32").finalize(),
-            PropertyBuilder::new().name("max_upload_total_bandwith").type_s("i32").finalize(),
-            PropertyBuilder::new().name("download_quota").type_s("i32").finalize(),
-            PropertyBuilder::new().name("upload_quota").type_s("i32").finalize(),
-            PropertyBuilder::new().name("month_bytes_downloaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("month_bytes_uploaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_bytes_downloaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_bytes_uploaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("complain_autoban_count").type_s("i32").finalize(),
-            PropertyBuilder::new().name("complain_autoban_time").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("complain_remove_time").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("min_clients_in_channel_before_forced_silence").type_s("i32").finalize(),
-            PropertyBuilder::new().name("antiflood_points_tick_reduce").type_s("i32").finalize(),
-            PropertyBuilder::new().name("antiflood_points_needed_command_block").type_s("i32").finalize(),
-            PropertyBuilder::new().name("antiflood_points_needed_ip_block").type_s("i32").finalize(),
-            PropertyBuilder::new().name("port").type_s("i32").finalize(),
-            PropertyBuilder::new().name("autostart").type_s("bool").finalize(),
-            PropertyBuilder::new().name("machine_id").type_s("i32").finalize(),
-            PropertyBuilder::new().name("needed_identity_security_level").type_s("i32").finalize(),
-            PropertyBuilder::new().name("log_client").type_s("bool").finalize(),
-            PropertyBuilder::new().name("log_query").type_s("bool").finalize(),
-            PropertyBuilder::new().name("log_channel").type_s("bool").finalize(),
-            PropertyBuilder::new().name("log_permissions").type_s("bool").finalize(),
-            PropertyBuilder::new().name("log_server").type_s("bool").finalize(),
-            PropertyBuilder::new().name("log_filetransfer").type_s("bool").finalize(),
-            PropertyBuilder::new().name("min_client_version").type_s("String").finalize(),
-            PropertyBuilder::new().name("total_packetloss_speech").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_packetloss_keepalive").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_packetloss_control").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_packetloss_total").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_ping").type_s("i32").finalize(),
-            PropertyBuilder::new().name("weblist_enabled").type_s("bool").finalize(),
+            builder_string.name("welcome_message").finalize(),
+            builder_i32.name("max_clients").finalize(),
+            builder_i32.name("clients_online").finalize(),
+            builder_i32.name("channels_online").finalize(),
+            builder_i32.name("client_connections").finalize(),
+            builder_i32.name("query_client_connections").finalize(),
+            builder_i32.name("query_clients_online").finalize(),
+            builder.name("uptime").type_s("Duration").finalize(),
+            builder.name("password").type_s("bool").finalize(),
+            builder_i32.name("max_download_total_bandwith").finalize(),
+            builder_i32.name("max_upload_total_bandwith").finalize(),
+            builder_i32.name("download_quota").finalize(),
+            builder_i32.name("upload_quota").finalize(),
+            builder_i32.name("month_bytes_downloaded").finalize(),
+            builder_i32.name("month_bytes_uploaded").finalize(),
+            builder_i32.name("total_bytes_downloaded").finalize(),
+            builder_i32.name("total_bytes_uploaded").finalize(),
+            builder_i32.name("complain_autoban_count").finalize(),
+            builder.name("complain_autoban_time").type_s("Duration").finalize(),
+            builder.name("complain_remove_time").type_s("Duration").finalize(),
+            builder_i32.name("min_clients_in_channel_before_forced_silence").finalize(),
+            builder_i32.name("antiflood_points_tick_reduce").finalize(),
+            builder_i32.name("antiflood_points_needed_command_block").finalize(),
+            builder_i32.name("antiflood_points_needed_ip_block").finalize(),
+            builder_i32.name("port").finalize(),
+            builder.name("autostart").type_s("bool").finalize(),
+            builder_i32.name("machine_id").finalize(),
+            builder_i32.name("needed_identity_security_level").finalize(),
+            builder.name("log_client").type_s("bool").finalize(),
+            builder.name("log_query").type_s("bool").finalize(),
+            builder.name("log_channel").type_s("bool").finalize(),
+            builder.name("log_permissions").type_s("bool").finalize(),
+            builder.name("log_server").type_s("bool").finalize(),
+            builder.name("log_filetransfer").type_s("bool").finalize(),
+            builder_string.name("min_client_version").finalize(),
+            builder_i32.name("total_packetloss_speech").finalize(),
+            builder_i32.name("total_packetloss_keepalive").finalize(),
+            builder_i32.name("total_packetloss_control").finalize(),
+            builder_i32.name("total_packetloss_total").finalize(),
+            builder_i32.name("total_ping").finalize(),
+            builder.name("weblist_enabled").type_s("bool").finalize(),
         ]).finalize();
     // Outdated server data
     let outdated_server_data = StructBuilder::new().name("OutdatedServerData")
         .documentation("Server properties that are available at the start but not updated")
         .properties(vec![
-            PropertyBuilder::new().name("hostmessage").type_s("String").finalize(),
-            PropertyBuilder::new().name("hostmessage_mode").type_s("HostmessageMode").finalize(),
+            builder_string.name("hostmessage").finalize(),
+            builder.name("hostmessage_mode").type_s("HostmessageMode").finalize(),
         ]).finalize();
     // The real server data
     let server = StructBuilder::new().name("Server")
+        .constructor_args("id: ServerId, ")
         .extra_attributes("\
             visible_connections: Map<ConnectionId, Connection>,\n\
             outdated_data: OutdatedServerData,\n\
             optional_data: Option<OptionalServerData>,\n")
+        .extra_initialisation("\
+            let uid = try!(Server::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));\n\
+            // These attributes are not in the main struct\n\
+            let hostbanner_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };\n\
+            let hostmessage_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };\n\
+            let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));\n\n\
+
+            //TODO\n\
+            let created = UTC::now();\n\
+            let default_server_group = Permissions;\n\
+            let default_channel_group = Permissions;\n\
+            let default_channel_admin_group = Permissions;\n\
+            //TODO Query currently visible connections on this server\n\
+            let visible_connections = Map::new();\n")
+        .extra_creation("\
+            uid: uid,\n\
+            visible_connections: visible_connections,\n\
+            outdated_data: OutdatedServerData {\n\
+                \thostmessage: hostmessage,\n\
+                \thostmessage_mode: hostmessage_mode,\n\
+            },\n\
+            optional_data: None,\n")
         .properties(vec![
-            PropertyBuilder::new().name("id").type_s("ServerId").finalize(),
-            PropertyBuilder::new().name("uid").type_s("String").finalize(),
-            PropertyBuilder::new().name("name").type_s("String").finalize(),
-            PropertyBuilder::new().name("name_phonetic").type_s("String").finalize(),
-            PropertyBuilder::new().name("platform").type_s("String").finalize(),
-            PropertyBuilder::new().name("version").type_s("String").finalize(),
-            PropertyBuilder::new().name("created").type_s("DateTime<UTC>").finalize(),
-            PropertyBuilder::new().name("codec_encryption_mode").type_s("CodecEncryptionMode").finalize(),
-            PropertyBuilder::new().name("default_server_group").type_s("Permissions").finalize(),
-            PropertyBuilder::new().name("default_channel_group").type_s("Permissions").finalize(),
-            PropertyBuilder::new().name("default_channel_admin_group").type_s("Permissions").finalize(),
-            PropertyBuilder::new().name("hostbanner_url").type_s("String").finalize(),
-            PropertyBuilder::new().name("hostbanner_gfx_url").type_s("String").finalize(),
-            PropertyBuilder::new().name("hostbanner_gfx_interval").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("hostbanner_mode").type_s("HostbannerMode").finalize(),
-            PropertyBuilder::new().name("priority_speaker_dimm_modificator").type_s("i32").finalize(),
-            PropertyBuilder::new().name("hostbutton_tooltip").type_s("String").finalize(),
-            PropertyBuilder::new().name("hostbutton_url").type_s("String").finalize(),
-            PropertyBuilder::new().name("hostbutton_gfx_url").type_s("String").finalize(),
-            PropertyBuilder::new().name("icon_id").type_s("i32").finalize(),
-            PropertyBuilder::new().name("reserved_slots").type_s("i32").finalize(),
-            PropertyBuilder::new().name("ask_for_privilegekey").type_s("bool").finalize(),
-            PropertyBuilder::new().name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
+            builder.name("id").type_s("ServerId").finalize(),
+            builder_string.name("uid").finalize(),
+            builder_string.name("name").finalize(),
+            builder_string.name("name_phonetic").finalize(),
+            builder_string.name("platform").finalize(),
+            builder_string.name("version").finalize(),
+            builder.name("created").type_s("DateTime<UTC>").finalize(),
+            builder.name("codec_encryption_mode").type_s("CodecEncryptionMode").finalize(),
+            builder.name("default_server_group").type_s("Permissions").finalize(),
+            builder.name("default_channel_group").type_s("Permissions").finalize(),
+            builder.name("default_channel_admin_group").type_s("Permissions").finalize(),
+            builder_string.name("hostbanner_url").finalize(),
+            builder_string.name("hostbanner_gfx_url").finalize(),
+            builder.name("hostbanner_gfx_interval").type_s("Duration").finalize(),
+            builder.name("hostbanner_mode").type_s("HostbannerMode").finalize(),
+            builder_i32.name("priority_speaker_dimm_modificator").finalize(),
+            builder_string.name("hostbutton_tooltip").finalize(),
+            builder_string.name("hostbutton_url").finalize(),
+            builder_string.name("hostbutton_gfx_url").finalize(),
+            builder_i32.name("icon_id").finalize(),
+            builder_i32.name("reserved_slots").finalize(),
+            builder.name("ask_for_privilegekey").type_s("bool").finalize(),
+            builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
         ]).finalize();
 
     // Structs
@@ -306,22 +492,10 @@ impl Server {
     fn get_optional_data(&self) -> &Option<OptionalServerData> {
         &self.optional_data
     }
+}\n\n".as_bytes()).unwrap();
 
-    fn new(id: ServerId) -> Result<Server, Error> {
-        let uid = try!(Server::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));
-        // Enums have to be transmuted
-        let codec_encryption_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::CodecEncryptionMode))) };
-        let hostbanner_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };
-        let hostmessage_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };
-        let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));
-
-        //TODO
-        let created = UTC::now();
-        let default_server_group = Permissions;
-        let default_channel_group = Permissions;
-        let default_channel_admin_group = Permissions;
-        //TODO Query currently visible connections on this server
-        let visible_connections = Map::new();".as_bytes()).unwrap();
+    // Constructors
+    //f.write_all(optional_server_data.create_constructor("id: ServerId", &default_functions, "id, ", "VirtualServerProperties").as_bytes()).unwrap();
 
     // Initialize variables and ignore uid because it has another name
     {
@@ -331,142 +505,159 @@ impl Server {
             properties: ss,
             ..server
         };
-        //f.write_all(constructor_variables("Server", "VirtualServerProperties", &default_functions, "id, ", &ss).as_bytes()).unwrap();
+        f.write_all(s.create_constructor().as_bytes()).unwrap();
     }
-
-    f.write_all("
-
-        Ok(Server {".as_bytes()).unwrap();
-    //f.write_all(constructor_creation(&server).as_bytes()).unwrap();
-
-    f.write_all("
-            visible_connections: visible_connections,
-            outdated_data: OutdatedServerData {
-                hostmessage: hostmessage,
-                hostmessage_mode: hostmessage_mode,
-            },
-            optional_data: None,
-        })
-    }
-}\n\n".as_bytes()).unwrap();
 }
 
 fn create_connection(f: &mut Write) {
     // Map types to functions that will get that type
     let default_functions = {
         let mut m = Map::new();
-        m.insert("i32", "get_property_as_int");
-        m.insert("String", "get_property_as_string");
+        m.insert("i32", "get_connection_property_as_uint64");
+        m.insert("u64", "get_connection_property_as_uint64");
+        m.insert("String", "get_connection_property_as_string");
         m
     };
+    let client_functions = {
+        let mut m = Map::new();
+        m.insert("i32", "get_client_property_as_int");
+        m.insert("String", "get_client_property_as_string");
+        m
+    };
+    let transmutable = vec!["InputDeactivationStatus", "TalkStatus",
+        "MuteInputStatus", "MuteOutputStatus", "HardwareInputStatus",
+        "HardwareOutputStatus", "AwayStatus"];
 
+    let mut builder = PropertyBuilder::new();
+    builder.functions(default_functions)
+        .transmutable(transmutable)
+        .default_args("server_id, id, ")
+        .enum_name("ConnectionProperties");
+    let mut builder_string = builder.clone();
+    builder_string.type_s("String");
+    let mut builder_i32 = builder.clone();
+    builder_i32.type_s("i32");
+    let mut builder_u64 = builder.clone();
+    builder_u64.type_s("u64");
+
+    let mut client_b = builder.clone();
+    client_b.enum_name("ClientProperties")
+        .functions(client_functions);
+    let mut client_b_string = client_b.clone();
+    client_b_string .type_s("String");
+    let mut client_b_i32 = client_b.clone();
+    client_b_i32 .type_s("i32");
     // Own connection data
     let own_connection_data = StructBuilder::new().name("OwnConnectionData")
         .properties(vec![
-            PropertyBuilder::new().name("server_ip").type_s("String").finalize(),
-            PropertyBuilder::new().name("server_port").type_s("u16").finalize(),
-            PropertyBuilder::new().name("input_deactivated").type_s("InputDeactivationStatus").finalize(),
-            PropertyBuilder::new().name("default_channel").type_s("ChannelId").finalize(),
-            PropertyBuilder::new().name("default_token").type_s("String").finalize(),
+            builder_string.name("server_ip").finalize(),
+            builder.name("server_port").type_s("u16").finalize(),
+            builder.name("input_deactivated").type_s("InputDeactivationStatus").finalize(),
+            builder.name("default_channel").type_s("ChannelId").finalize(),
+            builder_string.name("default_token").finalize(),
         ]).finalize();
     // Serverquery connection data
     let serverquery_connection_data = StructBuilder::new().name("ServerqueryConnectionData")
         .properties(vec![
-            PropertyBuilder::new().name("name").type_s("String").finalize(),
-            PropertyBuilder::new().name("password").type_s("String").finalize(),
+            builder_string.name("name").finalize(),
+            builder_string.name("password").finalize(),
         ]).finalize();
     // Optional connection data
     let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
         .properties(vec![
-            PropertyBuilder::new().name("version").type_s("String").finalize(),
-            PropertyBuilder::new().name("platform").type_s("String").finalize(),
-            PropertyBuilder::new().name("created").type_s("DateTime<UTC>").finalize(),
-            PropertyBuilder::new().name("last_connected").type_s("DateTime<UTC>").finalize(),
-            PropertyBuilder::new().name("total_connection").type_s("i32").finalize(),
-            PropertyBuilder::new().name("month_bytes_uploaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("month_bytes_downloaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_bytes_uploaded").type_s("i32").finalize(),
-            PropertyBuilder::new().name("total_bytes_downloaded").type_s("i32").finalize(),
+            builder_string.name("version").finalize(),
+            builder_string.name("platform").finalize(),
+            builder.name("created").type_s("DateTime<UTC>").finalize(),
+            builder.name("last_connected").type_s("DateTime<UTC>").finalize(),
+            builder_i32.name("total_connection").finalize(),
+            builder_i32.name("month_bytes_uploaded").finalize(),
+            builder_i32.name("month_bytes_downloaded").finalize(),
+            builder_i32.name("total_bytes_uploaded").finalize(),
+            builder_i32.name("total_bytes_downloaded").finalize(),
         ]).finalize();
     // The real connection data
     let connection = StructBuilder::new().name("Connection")
-        .extra_attributes("\
-            /// The channel that sets the current channel id of this client.\n\
-            channel_group_inherited_channel_id: Option<ChannelId>,\n\
-            /// Only set for oneself\n\
-            own_data: Option<OwnConnectionData>,\n\
-            serverquery_data: Option<ServerqueryConnectionData>,\n\
-            optional_data: Option<OptionalConnectionData>,\n")
+        .constructor_args("server_id: ServerId, id: ConnectionId")
+        .extra_initialisation("\
+            let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
         .properties(vec![
-            PropertyBuilder::new().name("id").type_s("ConnectionId").finalize(),
-            PropertyBuilder::new().name("server_id").type_s("ServerId").finalize(),
-            PropertyBuilder::new().name("ping").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("ping_deciation").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("connected_time").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("idle_time").type_s("Duration").finalize(),
-            PropertyBuilder::new().name("client_ip").type_s("String").finalize(),
-            PropertyBuilder::new().name("client_port").type_s("String").finalize(),
+            builder.name("id").type_s("ConnectionId").finalize(),
+            builder.name("server_id").type_s("ServerId").finalize(),
+            builder.name("ping").type_s("Duration").finalize(),
+            builder.name("ping_deviation").type_s("Duration").finalize(),
+            builder.name("connected_time").type_s("Duration").finalize(),
+            builder.name("idle_time").type_s("Duration").finalize(),
+            builder_string.name("client_ip").finalize(),
+            builder.name("client_port").type_s("u16").finalize(),
             // Network
-            PropertyBuilder::new().name("packets_sent_speech").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_sent_keepalive").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_sent_control").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_sent_total").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_sent_speech").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_sent_keepalive").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_sent_control").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_sent_total").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_received_speech").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_received_keepalive").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_received_control").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packets_received_total").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_received_speech").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_received_keepalive").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_received_control").type_s("u64").finalize(),
-            PropertyBuilder::new().name("bytes_received_total").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packetloss_speech").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packetloss_keepalive").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packetloss_control").type_s("u64").finalize(),
-            PropertyBuilder::new().name("packetloss_total").type_s("u64").finalize(),
+            builder_u64.name("packets_sent_speech").finalize(),
+            builder_u64.name("packets_sent_keepalive").finalize(),
+            builder_u64.name("packets_sent_control").finalize(),
+            builder_u64.name("packets_sent_total").finalize(),
+            builder_u64.name("bytes_sent_speech").finalize(),
+            builder_u64.name("bytes_sent_keepalive").finalize(),
+            builder_u64.name("bytes_sent_control").finalize(),
+            builder_u64.name("bytes_sent_total").finalize(),
+            builder_u64.name("packets_received_speech").finalize(),
+            builder_u64.name("packets_received_keepalive").finalize(),
+            builder_u64.name("packets_received_control").finalize(),
+            builder_u64.name("packets_received_total").finalize(),
+            builder_u64.name("bytes_received_speech").finalize(),
+            builder_u64.name("bytes_received_keepalive").finalize(),
+            builder_u64.name("bytes_received_control").finalize(),
+            builder_u64.name("bytes_received_total").finalize(),
+            builder_u64.name("packetloss_speech").finalize(),
+            builder_u64.name("packetloss_keepalive").finalize(),
+            builder_u64.name("packetloss_control").finalize(),
+            builder_u64.name("packetloss_total").finalize(),
             //TODO much more...
             // End network
 
             // ClientProperties
-            PropertyBuilder::new().name("uid").type_s("String").finalize(),
-            PropertyBuilder::new().name("name").type_s("String").finalize(),
-            PropertyBuilder::new().name("talking").type_s("TalkStatus").finalize(),
-            PropertyBuilder::new().name("input_muted").type_s("MuteInputStatus").finalize(),
-            PropertyBuilder::new().name("output_muted").type_s("MuteOutputStatus").finalize(),
-            PropertyBuilder::new().name("output_only_muted").type_s("MuteOutputStatus").finalize(),
-            PropertyBuilder::new().name("input_hardware").type_s("HardwareInputStatus").finalize(),
-            PropertyBuilder::new().name("output_hardware").type_s("HardwareOutputStatus").finalize(),
-            PropertyBuilder::new().name("default_channel_password").type_s("String").finalize(),
-            PropertyBuilder::new().name("server_password").type_s("String").finalize(),
-            PropertyBuilder::new().name("is_muted").type_s("bool")
+            client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
+            client_b_string.name("name").finalize(),
+            client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
+            client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
+            client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
+            client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
+            client_b.name("input_hardware").type_s("HardwareInputStatus").finalize(),
+            client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
+            client_b_string.name("default_channel_password").finalize(),
+            client_b_string.name("server_password").finalize(),
+            client_b.name("is_muted").type_s("bool")
                 .documentation("If the client is locally muted.").finalize(),
-            PropertyBuilder::new().name("is_recording").type_s("bool").finalize(),
-            PropertyBuilder::new().name("volume_modificator").type_s("i32").finalize(),
-            PropertyBuilder::new().name("version_sign").type_s("String").finalize(),
-            PropertyBuilder::new().name("away").type_s("AwayStatus").finalize(),
-            PropertyBuilder::new().name("away_message").type_s("String").finalize(),
-            PropertyBuilder::new().name("flag_avatar").type_s("bool").finalize(),
-            PropertyBuilder::new().name("description").type_s("String").finalize(),
-            PropertyBuilder::new().name("is_talker").type_s("bool").finalize(),
-            PropertyBuilder::new().name("is_priority_speaker").type_s("bool").finalize(),
-            PropertyBuilder::new().name("has_unread_messages").type_s("bool").finalize(),
-            PropertyBuilder::new().name("phonetic_name").type_s("String").finalize(),
-            PropertyBuilder::new().name("needed_serverquery_view_power").type_s("i32").finalize(),
-            PropertyBuilder::new().name("icon_id").type_s("i32").finalize(),
-            PropertyBuilder::new().name("is_channel_commander").type_s("bool").finalize(),
-            PropertyBuilder::new().name("country").type_s("String").finalize(),
-            PropertyBuilder::new().name("badges").type_s("String").finalize(),
-            PropertyBuilder::new().name("database_id").type_s("Option<Permissions>")
+            client_b.name("is_recording").type_s("bool").finalize(),
+            client_b_i32.name("volume_modificator").finalize(),
+            client_b.name("version_sign").finalize(),
+            client_b.name("away").type_s("AwayStatus").finalize(),
+            client_b_string.name("away_message").finalize(),
+            client_b.name("flag_avatar").type_s("bool").finalize(),
+            client_b_string.name("description").finalize(),
+            client_b.name("is_talker").type_s("bool").finalize(),
+            client_b.name("is_priority_speaker").type_s("bool").finalize(),
+            client_b.name("has_unread_messages").type_s("bool").finalize(),
+            client_b_string.name("phonetic_name").finalize(),
+            client_b_i32.name("needed_serverquery_view_power").finalize(),
+            client_b_i32.name("icon_id").finalize(),
+            client_b.name("is_channel_commander").type_s("bool").finalize(),
+            client_b_string.name("country").finalize(),
+            client_b_string.name("badges").finalize(),
+            client_b.name("database_id").type_s("Option<Permissions>")
                 .documentation("Only valid data if we have the appropriate permissions.").finalize(),
-            PropertyBuilder::new().name("channel_group_id").type_s("Option<Permissions>").finalize(),
-            PropertyBuilder::new().name("server_groups").type_s("Option<Vec<Permissions>>").finalize(),
-            PropertyBuilder::new().name("talk_power").type_s("Option<i32>").finalize(),
+            client_b.name("channel_group_id").type_s("Option<Permissions>").finalize(),
+            client_b.name("server_groups").type_s("Option<Vec<Permissions>>").finalize(),
+            client_b.name("talk_power").type_s("Option<i32>").finalize(),
             // When this client requested to talk
-            PropertyBuilder::new().name("talk_request").type_s("Option<DateTime<UTC>>").finalize(),
-            PropertyBuilder::new().name("talk_request_message").type_s("Option<String>").finalize(),
+            client_b.name("talk_request").type_s("Option<DateTime<UTC>>").finalize(),
+            client_b.name("talk_request_message").type_s("Option<String>").finalize(),
+
+            client_b.name("channel_group_inherited_channel_id").type_s("Option<ChannelId>")
+                .documentation("The channel that sets the current channel id of this client.").finalize(),
+            client_b.name("own_data").type_s("Option<OwnConnectionData>")
+                .documentation("Only set for oneself").finalize(),
+            client_b.name("serverquery_data").type_s("Option<ServerqueryConnectionData>")
+                .documentation("Only available for serverqueries").finalize(),
+            client_b.name("optional_data").type_s("Option<OptionalConnectionData>").finalize(),
     ]).finalize();
 
     // Structs
@@ -474,6 +665,16 @@ fn create_connection(f: &mut Write) {
     f.write_all(serverquery_connection_data.create_struct().as_bytes()).unwrap();
     f.write_all(optional_connection_data.create_struct().as_bytes()).unwrap();
     f.write_all(connection.create_struct().as_bytes()).unwrap();
+
+    // Implementations
+    f.write_all(own_connection_data.create_impl().as_bytes()).unwrap();
+    f.write_all(serverquery_connection_data.create_impl().as_bytes()).unwrap();
+    f.write_all(optional_connection_data.create_impl().as_bytes()).unwrap();
+    f.write_all(connection.create_impl().as_bytes()).unwrap();
+
+    // Constructors
+    //f.write_all(own_connection_data.create_constructor("id: ClientId", &default_functions, "id, ", "ConnectionProperties").as_bytes()).unwrap();
+    f.write_all(connection.create_constructor().as_bytes()).unwrap();
 }
 
 /// Build parts of lib.rs as most of the structs are very repetitive
@@ -489,42 +690,11 @@ fn main() {
     create_connection(&mut f);
 }
 
-/// struct_name: Name of the struct
-/// properties_name: Name of the properties enum
-/// args: Base args (id) to get properties
-fn constructor_variables(struct_name: &str, properties_name: &str, functions: &Map<&str, &str>, args: &str, data: &Vec<(&str, &str)>) -> String {
-    let mut result = String::new();
-    for &(name, var_type) in data {
-        let mut s = String::new();
-        // Ignore unknown types
-        if let Some(function) = functions.get(var_type) {
-            write!(s, "try!({}::{}({}{}::{}));", struct_name, function, args, properties_name, to_pascal_case(name)).unwrap();
-        } else {
-            match var_type {
-                "Duration" => { write!(s, "Duration::seconds(try!({}::{}({}{}::{})) as i64);", struct_name, "get_property_as_int", args, properties_name, to_pascal_case(name)).unwrap(); }
-                "bool" => { write!(s, "try!({}::{}({}{}::{})) != 0;", struct_name, "get_property_as_int", args, properties_name, to_pascal_case(name)).unwrap(); }
-                _ => {}
-            }
-        }
-        if !s.is_empty() {
-            write!(result, "\n        let {} = {}", name, s).unwrap();
-        }
-    }
-    result
-}
-
-fn constructor_creation(data: &Vec<(&str, &str)>) -> String {
-    let mut s = String::new();
-    for &(name, _) in data {
-        write!(s, "\n            {0}: {0},", name).unwrap();
-    }
-    s
-}
-
-fn to_pascal_case(text: &str) -> String {
-    let mut s = String::with_capacity(text.len());
+fn to_pascal_case<S: AsRef<str>>(text: S) -> String {
+    let sref = text.as_ref();
+    let mut s = String::with_capacity(sref.len());
     let mut uppercase = true;
-    for c in text.chars() {
+    for c in sref.chars() {
         if c == '_' {
             uppercase = true;
         } else {
@@ -540,11 +710,12 @@ fn to_pascal_case(text: &str) -> String {
 }
 
 /// Indent a string by a given count using spaces.
-fn indent(s: &str, count: usize) -> String {
-    let line_count = s.lines().count();
-    let mut result = String::with_capacity(s.len() + line_count * count * 4);
-    for l in s.lines() {
-        result.push_str(std::iter::repeat("    ").take(count).collect::<String>().as_ref());
+fn indent<S: AsRef<str>>(s: S, count: usize) -> String {
+    let sref = s.as_ref();
+    let line_count = sref.lines().count();
+    let mut result = String::with_capacity(sref.len() + line_count * count * 4);
+    for l in sref.lines() {
+        result.push_str(std::iter::repeat("    ").take(count).collect::<String>().as_str());
         result.push_str(l);
         result.push('\n');
     }
