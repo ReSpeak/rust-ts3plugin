@@ -105,7 +105,7 @@ macro_rules! create_plugin {
                 },
                 Err(error) => {
                     api.log_or_print(format!(
-                        "Can't create TsApi: {:?}", error).as_ref(),
+                        "Can't create TsApi: {:?}", error),
                         "rust-ts3plugin", $crate::LogLevel::Error);
                     1
                 }

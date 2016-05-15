@@ -7,11 +7,18 @@ build = "src/build.rs"
 [lib]
 name = "ts3plugin"
 
+[features]
+default = []
+
 [dependencies]
 chrono = "*"
-clippy = "*"
 lazy_static = "*"
 libc = "*"
+
+# Use `cargo build --features "clippy"` to see style lints
+[dependencies.clippy]
+version = "*"
+optional = true
 
 [dependencies.ts3plugin_sys]
 #git = "https://github.com/Flakebi/rust-ts3plugin-sys"

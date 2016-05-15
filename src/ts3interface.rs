@@ -35,7 +35,7 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                     // and don't have that server cached already.
                     if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
                         if let Err(error) = api.add_server(server_id) {
-                            api.log_or_print(format!("Can't get server information: {:?}", error).as_ref(), "rust-ts3plugin", ::LogLevel::Error)
+                            api.log_or_print(format!("Can't get server information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
                         }
                     }
                     // Execute plugin callback
@@ -57,7 +57,7 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                         }
                     };
                     if let Some(error) = err {
-                        api.log_or_print(format!("Can't get connection information: {:?}", error).as_ref(), "rust-ts3plugin", ::LogLevel::Error)
+                        api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
                     }
                     plugin.client_connect_changed(&mut api, server_id, client_connection_id, true)
                 } else if new_channel_id == ::ChannelId(0) {

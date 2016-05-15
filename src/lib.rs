@@ -35,8 +35,8 @@
 
 #![allow(dead_code)]
 #![feature(macro_reexport)]
-#![feature(plugin)]
-#![plugin(clippy)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate libc;
 extern crate chrono;
@@ -95,11 +95,6 @@ pub struct ServerId(u64);
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ChannelId(u64);
-
-pub struct Channel {
-    id: ChannelId,
-    server_id: ServerId,
-}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ConnectionId(u16);
@@ -163,6 +158,47 @@ impl PartialEq<Channel> for Channel {
     }
 }
 impl Eq for Channel {}
+
+impl Channel {
+    fn get_property_as_string(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<String, Error> {
+        unsafe {
+            let mut name: *mut c_char = std::ptr::null_mut();
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_variable_as_string)
+                    (server_id.0, id.0, property as size_t, &mut name));
+            match res {
+                Error::Ok => Ok(to_string!(name)),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn get_property_as_int(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
+        unsafe {
+            let mut number: c_int = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_variable_as_int)
+                    (server_id.0, id.0, property as size_t, &mut number));
+            match res {
+                Error::Ok => Ok(number as i32),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn get_property_as_uint64(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
+        unsafe {
+            let mut number: u64 = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_variable_as_uint64)
+                    (server_id.0, id.0, property as size_t, &mut number));
+            match res {
+                Error::Ok => Ok(number as i32),
+                _ => Err(res)
+            }
+        }
+    }
+}
 
 // ********** Connection **********
 impl PartialEq<Connection> for Connection {
@@ -278,7 +314,7 @@ impl TsApi {
                         // Ignore tabs without connected servers
                         Err(Error::NotConnected) | Ok(_) => {},
                         Err(error) => self.log_or_print(format!(
-                            "Can't load server: {:?}", error).as_ref(),
+                            "Can't load server: {:?}", error),
                             "rust-ts3plugin", LogLevel::Error),
                     }
                     counter += 1;
@@ -289,12 +325,13 @@ impl TsApi {
         Ok(())
     }
 
-    fn static_log_message(message: &str, channel: &str, severity: LogLevel) -> Result<(), Error> {
+    /// Please try to use the member method `log_message` instead of this static method.
+    pub fn static_log_message<S1: AsRef<str>, S2: AsRef<str>>(message: S1, channel: S2, severity: LogLevel) -> Result<(), Error> {
         unsafe {
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").log_message)
-                    (to_cstring!(message).as_ptr(),
-                    severity, to_cstring!(channel).as_ptr(), 0));
+                    (to_cstring!(message.as_ref()).as_ptr(),
+                    severity, to_cstring!(channel.as_ref()).as_ptr(), 0));
             match res {
                 Error::Ok => Ok(()),
                 _ => Err(res)
@@ -302,10 +339,11 @@ impl TsApi {
         }
     }
 
-    fn static_log_or_print(message: &str, channel: &str, severity: LogLevel) {
-        if let Err(error) = TsApi::static_log_message(message, channel, severity) {
+    /// Please try to use the member method `log_or_print` instead of this static method.
+    pub fn static_log_or_print<S1: AsRef<str>, S2: AsRef<str>>(message: S1, channel: S2, severity: LogLevel) {
+        if let Err(error) = TsApi::static_log_message(message.as_ref(), channel.as_ref(), severity) {
             println!("Error {:?} while printing '{}' to '{}' ({:?})", error,
-                message, channel, severity);
+                message.as_ref(), channel.as_ref(), severity);
         }
     }
 
@@ -324,13 +362,13 @@ impl TsApi {
     // ********** Public Interface **********
 
     /// Log a message using the TeamSpeak logging API.
-    pub fn log_message(&self, message: &str, channel: &str, severity: LogLevel) -> Result<(), Error> {
+    pub fn log_message<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) -> Result<(), Error> {
         TsApi::static_log_message(message, channel, severity)
     }
 
     /// Log a message using the TeamSpeak logging API.
     /// If that fails, print the message.
-    pub fn log_or_print(&self, message: &str, channel: &str, severity: LogLevel) {
+    pub fn log_or_print<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) {
         TsApi::static_log_or_print(message, channel, severity)
     }
 

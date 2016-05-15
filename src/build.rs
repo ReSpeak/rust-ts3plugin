@@ -80,6 +80,7 @@ impl<'a> Property<'a> {
                 if let Some(function) = self.functions.get(t) {
                     s.push_str(format!("unsafe {{ transmute(try!(Self::{}({}{}::{}))) }}", function, self.default_args,
                         self.enum_name, value_name).as_str());
+                    break;
                 }
             }
         } else {
@@ -100,7 +101,8 @@ impl<'a> Property<'a> {
                     for t in &["i32", "u64"] {
                         if let Some(function) = self.functions.get(t) {
                             s.push_str(format!("try!(Self::{}({}{}::{})) != 0", function,
-                                self.default_args, self.enum_name, value_name).as_str())
+                                self.default_args, self.enum_name, value_name).as_str());
+                            break;
                         }
                     }
                 }
@@ -453,7 +455,7 @@ fn create_server(f: &mut Write) {
             builder.name("id").type_s("ServerId").finalize(),
             builder_string.name("uid").finalize(),
             builder_string.name("name").finalize(),
-            builder_string.name("name_phonetic").finalize(),
+            builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
             builder_string.name("platform").finalize(),
             builder_string.name("version").finalize(),
             builder.name("created").type_s("DateTime<UTC>").finalize(),
@@ -507,6 +509,78 @@ impl Server {
         };
         f.write_all(s.create_constructor().as_bytes()).unwrap();
     }
+}
+
+fn create_channel(f: &mut Write) {
+    // Map types to functions that will get that type
+    let default_functions = {
+        let mut m = Map::new();
+        m.insert("i32", "get_property_as_int");
+        m.insert("u64", "get_property_as_uint64");
+        m.insert("String", "get_property_as_string");
+        m
+    };
+    let transmutable = vec!["CodecType"];
+
+    let mut builder = PropertyBuilder::new();
+    builder.functions(default_functions)
+        .transmutable(transmutable)
+        .default_args("server_id, id, ")
+        .enum_name("ChannelProperties");
+    let mut builder_string = builder.clone();
+    builder_string.type_s("String");
+    let mut builder_i32 = builder.clone();
+    builder_i32.type_s("i32");
+    let mut builder_bool = builder.clone();
+    builder_bool.type_s("bool");
+
+    // Optional channel data
+    let optional_channel_data = StructBuilder::new().name("OptionalChannelData")
+        .documentation("Channel properties that have to be fetched explicitely")
+        .properties(vec![
+            builder_string.name("description").finalize(),
+        ]).finalize();
+    // The real channel data
+    let channel = StructBuilder::new().name("Channel")
+        .constructor_args("server_id: ServerId, id: ChannelId, ")
+        .properties(vec![
+            builder.name("id").type_s("ChannelId").finalize(),
+            builder.name("server_id").type_s("ServerId").finalize(),
+            builder_string.name("name").finalize(),
+            builder_string.name("topic").finalize(),
+            builder.name("codec").type_s("CodecType").finalize(),
+            builder_i32.name("codec_quality").finalize(),
+            builder_i32.name("max_clients").finalize(),
+            builder_i32.name("max_family_clients").finalize(),
+            builder_i32.name("order").finalize(),
+            builder_bool.name("permanent").value_name("FlagPermanent").finalize(),
+            builder_bool.name("semi_permanent").value_name("FlagSemiPermanent").finalize(),
+            builder_bool.name("default").value_name("FlagDefault").finalize(),
+            builder_bool.name("password").value_name("FlagPassword").finalize(),
+            builder_i32.name("codec_latency_factor").finalize(),
+            builder_bool.name("codec_is_unencrypted").finalize(),
+            builder_i32.name("delete_delay").finalize(),
+            builder_bool.name("max_clients_unlimited").finalize(),
+            builder_bool.name("max_family_clients_unlimited").finalize(),
+            // Clone so we can change the documentation
+            builder_bool.clone().name("subscribed").documentation("If we are subscribed to this channel").finalize(),
+            builder_i32.name("needed_talk_power").finalize(),
+            builder_i32.name("forced_silence").finalize(),
+            builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
+            builder_i32.name("icon_id").finalize(),
+            builder_bool.name("private").finalize(),
+
+            builder.name("optional_data").type_s("Option<OptionalChannelData>").finalize(),
+        ]).finalize();
+
+    // Structs
+    f.write_all(optional_channel_data.create_struct().as_bytes()).unwrap();
+    f.write_all(channel.create_struct().as_bytes()).unwrap();
+
+    // Implementations
+    f.write_all(optional_channel_data.create_impl().as_bytes()).unwrap();
+    f.write_all(channel.create_impl().as_bytes()).unwrap();
+    f.write_all(channel.create_constructor().as_bytes()).unwrap();
 }
 
 fn create_connection(f: &mut Write) {
@@ -687,6 +761,7 @@ fn main() {
     let mut f = File::create(&dest_path).unwrap();
 
     create_server(&mut f);
+    create_channel(&mut f);
     create_connection(&mut f);
 }
 
