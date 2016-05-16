@@ -1,12 +1,9 @@
-#![feature(slice_concat_ext)]
-
 use std::env;
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::slice::SliceConcatExt;
 
 type Map<K, V> = BTreeMap<K, V>;
 
@@ -136,54 +133,64 @@ impl<'a> PropertyBuilder<'a> {
         result
     }
 
-    fn name(&mut self, name: &'a str) -> &mut PropertyBuilder<'a> {
-        self.name = name;
-        self
+    fn name(&self, name: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.name = name;
+        res
     }
 
-    fn type_s(&mut self, type_s: &'a str) -> &mut PropertyBuilder<'a> {
-        self.type_s = type_s;
-        self
+    fn type_s(&self, type_s: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.type_s = type_s;
+        res
     }
 
-    fn documentation(&mut self, documentation: &'a str) -> &mut PropertyBuilder<'a> {
-        self.documentation = documentation;
-        self
+    fn documentation(&self, documentation: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.documentation = documentation;
+        res
     }
 
-    fn initialize(&mut self, initialize: bool) -> &mut PropertyBuilder<'a> {
-        self.initialize = initialize;
-        self
+    fn initialize(&self, initialize: bool) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.initialize = initialize;
+        res
     }
 
-    fn method_name(&mut self, method_name: &'a str) -> &mut PropertyBuilder<'a> {
-        self.method_name = Some(method_name);
-        self
+    fn method_name(&self, method_name: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.method_name = Some(method_name);
+        res
     }
 
-    fn enum_name(&mut self, enum_name: &'a str) -> &mut PropertyBuilder<'a> {
-        self.enum_name = enum_name;
-        self
+    fn enum_name(&self, enum_name: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.enum_name = enum_name;
+        res
     }
 
-    fn value_name(&mut self, value_name: &'a str) -> &mut PropertyBuilder<'a> {
-        self.value_name = Some(value_name);
-        self
+    fn value_name(&self, value_name: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.value_name = Some(value_name);
+        res
     }
 
-    fn functions(&mut self, functions: Map<&'a str, &'a str>) -> &mut PropertyBuilder<'a> {
-        self.functions = functions;
-        self
+    fn functions(&self, functions: Map<&'a str, &'a str>) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.functions = functions;
+        res
     }
 
-    fn transmutable(&mut self, transmutable: Vec<&'a str>) -> &mut PropertyBuilder<'a> {
-        self.transmutable = transmutable;
-        self
+    fn transmutable(&self, transmutable: Vec<&'a str>) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.transmutable = transmutable;
+        res
     }
 
-    fn default_args(&mut self, default_args: &'a str) -> &mut PropertyBuilder<'a> {
-        self.default_args = default_args;
-        self
+    fn default_args(&self, default_args: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.default_args = default_args;
+        res
     }
 
     fn finalize(&self) -> Property<'a> {
@@ -360,15 +367,13 @@ fn create_server(f: &mut Write) {
     };
     let transmutable = vec!["CodecEncryptionMode"];
 
-    let mut builder = PropertyBuilder::new();
-    builder.functions(default_functions)
+    let builder = PropertyBuilder::new()
+        .functions(default_functions)
         .transmutable(transmutable)
         .default_args("id, ")
         .enum_name("VirtualServerProperties");
-    let mut builder_string = builder.clone();
-    builder_string.type_s("String");
-    let mut builder_i32 = builder.clone();
-    builder_i32.type_s("i32");
+    let builder_string = builder.type_s("String");
+    let builder_i32 = builder.type_s("i32");
     // Optional server data
     let optional_server_data = StructBuilder::new().name("OptionalServerData")
         .documentation("Server properties that have to be fetched explicitely")
@@ -424,9 +429,10 @@ fn create_server(f: &mut Write) {
         ]).finalize();
     // The real server data
     let server = StructBuilder::new().name("Server")
-        .constructor_args("id: ServerId, ")
+        .constructor_args("id: ServerId")
         .extra_attributes("\
             visible_connections: Map<ConnectionId, Connection>,\n\
+            channels: Map<ChannelId, Channel>,\n\
             outdated_data: OutdatedServerData,\n\
             optional_data: Option<OptionalServerData>,\n")
         .extra_initialisation("\
@@ -441,11 +447,14 @@ fn create_server(f: &mut Write) {
             let default_server_group = Permissions;\n\
             let default_channel_group = Permissions;\n\
             let default_channel_admin_group = Permissions;\n\
-            //TODO Query currently visible connections on this server\n\
-            let visible_connections = Map::new();\n")
+            // Query currently visible connections on this server\n\
+            let visible_connections = Server::query_connections(id);\n\
+            // Query channels on this server\n\
+            let channels = Server::query_channels(id);\n")
         .extra_creation("\
             uid: uid,\n\
             visible_connections: visible_connections,\n\
+            channels: channels,\n\
             outdated_data: OutdatedServerData {\n\
                 \thostmessage: hostmessage,\n\
                 \thostmessage_mode: hostmessage_mode,\n\
@@ -522,17 +531,14 @@ fn create_channel(f: &mut Write) {
     };
     let transmutable = vec!["CodecType"];
 
-    let mut builder = PropertyBuilder::new();
-    builder.functions(default_functions)
+    let builder = PropertyBuilder::new()
+        .functions(default_functions)
         .transmutable(transmutable)
         .default_args("server_id, id, ")
         .enum_name("ChannelProperties");
-    let mut builder_string = builder.clone();
-    builder_string.type_s("String");
-    let mut builder_i32 = builder.clone();
-    builder_i32.type_s("i32");
-    let mut builder_bool = builder.clone();
-    builder_bool.type_s("bool");
+    let builder_string = builder.type_s("String");
+    let builder_i32 = builder.type_s("i32");
+    let builder_bool = builder.type_s("bool");
 
     // Optional channel data
     let optional_channel_data = StructBuilder::new().name("OptionalChannelData")
@@ -542,7 +548,7 @@ fn create_channel(f: &mut Write) {
         ]).finalize();
     // The real channel data
     let channel = StructBuilder::new().name("Channel")
-        .constructor_args("server_id: ServerId, id: ChannelId, ")
+        .constructor_args("server_id: ServerId, id: ChannelId")
         .properties(vec![
             builder.name("id").type_s("ChannelId").finalize(),
             builder.name("server_id").type_s("ServerId").finalize(),
@@ -560,15 +566,16 @@ fn create_channel(f: &mut Write) {
             builder_i32.name("codec_latency_factor").finalize(),
             builder_bool.name("codec_is_unencrypted").finalize(),
             builder_i32.name("delete_delay").finalize(),
-            builder_bool.name("max_clients_unlimited").finalize(),
-            builder_bool.name("max_family_clients_unlimited").finalize(),
+            builder_bool.name("max_clients_unlimited").value_name("FlagMaxClientsUnlimited").finalize(),
+            builder_bool.name("max_family_clients_unlimited").value_name("FlagMaxFamilyClientsUnlimited").finalize(),
             // Clone so we can change the documentation
-            builder_bool.clone().name("subscribed").documentation("If we are subscribed to this channel").finalize(),
+            builder_bool.name("subscribed").value_name("FlagAreSubscribed")
+                .documentation("If we are subscribed to this channel").finalize(),
             builder_i32.name("needed_talk_power").finalize(),
             builder_i32.name("forced_silence").finalize(),
             builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
             builder_i32.name("icon_id").finalize(),
-            builder_bool.name("private").finalize(),
+            builder_bool.name("private").value_name("FlagPrivate").finalize(),
 
             builder.name("optional_data").type_s("Option<OptionalChannelData>").finalize(),
         ]).finalize();
@@ -602,25 +609,19 @@ fn create_connection(f: &mut Write) {
         "MuteInputStatus", "MuteOutputStatus", "HardwareInputStatus",
         "HardwareOutputStatus", "AwayStatus"];
 
-    let mut builder = PropertyBuilder::new();
-    builder.functions(default_functions)
+    let builder = PropertyBuilder::new()
+        .functions(default_functions)
         .transmutable(transmutable)
         .default_args("server_id, id, ")
         .enum_name("ConnectionProperties");
-    let mut builder_string = builder.clone();
-    builder_string.type_s("String");
-    let mut builder_i32 = builder.clone();
-    builder_i32.type_s("i32");
-    let mut builder_u64 = builder.clone();
-    builder_u64.type_s("u64");
+    let builder_string = builder.type_s("String");
+    let builder_i32 = builder.type_s("i32");
+    let builder_u64 = builder.type_s("u64");
 
-    let mut client_b = builder.clone();
-    client_b.enum_name("ClientProperties")
+    let client_b = builder.enum_name("ClientProperties")
         .functions(client_functions);
-    let mut client_b_string = client_b.clone();
-    client_b_string .type_s("String");
-    let mut client_b_i32 = client_b.clone();
-    client_b_i32 .type_s("i32");
+    let client_b_string = client_b.type_s("String");
+    let client_b_i32 = client_b.type_s("i32");
     // Own connection data
     let own_connection_data = StructBuilder::new().name("OwnConnectionData")
         .properties(vec![
@@ -653,11 +654,11 @@ fn create_connection(f: &mut Write) {
     let connection = StructBuilder::new().name("Connection")
         .constructor_args("server_id: ServerId, id: ConnectionId")
         .extra_initialisation("\
-            let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
+            //let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
         .properties(vec![
             builder.name("id").type_s("ConnectionId").finalize(),
             builder.name("server_id").type_s("ServerId").finalize(),
-            builder.name("ping").type_s("Duration").finalize(),
+            /*builder.name("ping").type_s("Duration").finalize(),
             builder.name("ping_deviation").type_s("Duration").finalize(),
             builder.name("connected_time").type_s("Duration").finalize(),
             builder.name("idle_time").type_s("Duration").finalize(),
@@ -683,14 +684,14 @@ fn create_connection(f: &mut Write) {
             builder_u64.name("packetloss_speech").finalize(),
             builder_u64.name("packetloss_keepalive").finalize(),
             builder_u64.name("packetloss_control").finalize(),
-            builder_u64.name("packetloss_total").finalize(),
+            builder_u64.name("packetloss_total").finalize(),*/
             //TODO much more...
             // End network
 
             // ClientProperties
             client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
-            client_b_string.name("name").finalize(),
-            client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
+            client_b_string.name("name").value_name("Nickname").finalize(),
+            /*client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
             client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
             client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
@@ -709,9 +710,9 @@ fn create_connection(f: &mut Write) {
             client_b_string.name("description").finalize(),
             client_b.name("is_talker").type_s("bool").finalize(),
             client_b.name("is_priority_speaker").type_s("bool").finalize(),
-            client_b.name("has_unread_messages").type_s("bool").finalize(),
-            client_b_string.name("phonetic_name").finalize(),
-            client_b_i32.name("needed_serverquery_view_power").finalize(),
+            client_b.name("has_unread_messages").type_s("bool").finalize(),*/
+            client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
+            /*client_b_i32.name("needed_serverquery_view_power").finalize(),
             client_b_i32.name("icon_id").finalize(),
             client_b.name("is_channel_commander").type_s("bool").finalize(),
             client_b_string.name("country").finalize(),
@@ -723,7 +724,7 @@ fn create_connection(f: &mut Write) {
             client_b.name("talk_power").type_s("Option<i32>").finalize(),
             // When this client requested to talk
             client_b.name("talk_request").type_s("Option<DateTime<UTC>>").finalize(),
-            client_b.name("talk_request_message").type_s("Option<String>").finalize(),
+            client_b.name("talk_request_message").type_s("Option<String>").finalize(),*/
 
             client_b.name("channel_group_inherited_channel_id").type_s("Option<ChannelId>")
                 .documentation("The channel that sets the current channel id of this client.").finalize(),

@@ -13,6 +13,7 @@ static mut TX: Option<*const Sender<FunctionCall>> = None;
 
 enum FunctionCall {
     ConnectStatusChange(::ServerId, ConnectStatus, Error),
+    ChannelAnnounced(::ServerId, ::ChannelId, ::ChannelId),
     ClientMove(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
     Quit
 }
@@ -31,40 +32,51 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
     loop {
         match rx.recv().unwrap() {
             FunctionCall::ConnectStatusChange(server_id, status, error) => {
-                    // Add the server if we can get information about it
-                    // and don't have that server cached already.
-                    if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
-                        if let Err(error) = api.add_server(server_id) {
-                            api.log_or_print(format!("Can't get server information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
-                        }
+                // Add the server if we can get information about it
+                // and don't have that server cached already.
+                if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
+                    if let Err(error) = api.add_server(server_id) {
+                        api.log_or_print(format!("Can't get server information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
                     }
-                    // Execute plugin callback
-                    plugin.connect_status_change(&mut api, server_id, status, error);
-                    // Remove server if we disconnected
-                    if status == ConnectStatus::Disconnected {
-                        api.remove_server(server_id);
-                    }
-                },
-            FunctionCall::ClientMove(server_id, client_connection_id, old_channel_id, new_channel_id, visibility, move_message) => {
+                }
+                // Execute plugin callback
+                plugin.connect_status_change(&mut api, server_id, status, error);
+                // Remove server if we disconnected
+                if status == ConnectStatus::Disconnected {
+                    api.remove_server(server_id);
+                }
+            },
+            FunctionCall::ChannelAnnounced(server_id, channel_id, _) => {
+                let err = {
+	            	let server = api.get_mut_server(server_id).unwrap();
+                    server.add_channel(channel_id).err()
+                };
+                if let Some(error) = err {
+                    api.log_or_print(format!("Can't get channel information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
+                }
+                plugin.channel_announced(&mut api, server_id, channel_id);
+            }
+            FunctionCall::ClientMove(server_id, connection_id, old_channel_id, new_channel_id, visibility, move_message) => {
                 if old_channel_id == ::ChannelId(0) {
+                    //TODO Don't send own connects and disconnects
                     // Client connected
                     let err = {
                         let server = api.get_mut_server(server_id).unwrap();
-                        if let Err(error) = server.add_connection(client_connection_id) {
-                            Some(error)
-                        } else {
-                            None
-                        }
+                        server.add_connection(connection_id).err()
                     };
                     if let Some(error) = err {
                         api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
                     }
-                    plugin.client_connect_changed(&mut api, server_id, client_connection_id, true)
+                    plugin.connection_changed(&mut api, server_id, connection_id, true, move_message)
                 } else if new_channel_id == ::ChannelId(0) {
                     // Client disconnected
-                    plugin.client_connect_changed(&mut api, server_id, client_connection_id, false)
+                    plugin.connection_changed(&mut api, server_id, connection_id, false, move_message)
+                } else if old_channel_id == new_channel_id {
+                    // Client announced
+                    plugin.connection_announced(&mut api, server_id, connection_id)
                 } else {
                     // Client switched channel
+                    plugin.connection_moved(&mut api, server_id, connection_id, old_channel_id, new_channel_id)
                 }
             },
             FunctionCall::Quit => {
@@ -113,6 +125,13 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64, st
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, client_connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
-    (*TX.unwrap()).send(FunctionCall::ClientMove(::ServerId(server_id), ::ConnectionId(client_connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id), transmute(visibility), to_string!(move_message))).unwrap()
+pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id: u64, parent_channel_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ChannelAnnounced(::ServerId(server_id), ::ChannelId(channel_id), ::ChannelId(parent_channel_id))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ClientMove(::ServerId(server_id), ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id), transmute(visibility), to_string!(move_message))).unwrap()
 }

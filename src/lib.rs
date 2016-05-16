@@ -7,6 +7,8 @@
 //! ```
 //! #[macro_use]
 //! extern crate ts3plugin;
+//! #[macro_use]
+//! extern crate lazy_static;
 //!
 //! use ts3plugin::*;
 //!
@@ -32,17 +34,15 @@
 //!
 //! # fn main() { }
 //! ```
+//!
+//! You also need to add `lazy_static` to the crates dependencies.
 
 #![allow(dead_code)]
-#![feature(macro_reexport)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate libc;
 extern crate chrono;
-#[macro_use]
-#[macro_reexport(lazy_static)]
-extern crate lazy_static;
 extern crate ts3plugin_sys;
 
 pub use ts3plugin_sys::clientlib_publicdefinitions::*;
@@ -137,8 +137,61 @@ impl Server {
         }
     }
 
+	/// Called when a new Server is created.
+	/// When an error occurs, users are not inserted into the map.
+	fn query_connections(id: ServerId) -> Map<ConnectionId, Connection> {
+		let mut map = Map::new();
+	    // Query connected connections
+	    let mut result: *mut u16 = std::ptr::null_mut();
+	    let res: Error = unsafe { transmute((ts3functions.as_ref()
+	        .expect("Functions should be loaded").get_client_list)
+	            (id.0, &mut result)) };
+	    if res == Error::Ok {
+	        unsafe {
+			    let mut counter = 0;
+			    while *result.offset(counter) != 0 {
+			    	let connection_id = ConnectionId(*result.offset(counter));
+			    	if let Ok(connection) = Connection::new(id, connection_id) {
+				        map.insert(connection_id, connection);
+				    }
+			        counter += 1;
+			    }
+	        }
+	    }
+		map
+	}
+
+	/// Called when a new Server is created.
+	/// When an error occurs, channels are not inserted into the map.
+	fn query_channels(id: ServerId) -> Map<ChannelId, Channel> {
+		let mut map = Map::new();
+	    // Query connected connections
+	    let mut result: *mut u64 = std::ptr::null_mut();
+	    let res: Error = unsafe { transmute((ts3functions.as_ref()
+	        .expect("Functions should be loaded").get_channel_list)
+	            (id.0, &mut result)) };
+	    if res == Error::Ok {
+	        unsafe {
+	            let mut counter = 0;
+			    while *result.offset(counter) != 0 {
+			    	let channel_id = ChannelId(*result.offset(counter));
+			    	if let Ok(channel) = Channel::new(id, channel_id) {
+				        map.insert(channel_id, channel);
+				    }
+			        counter += 1;
+		        }
+	        }
+	    }
+		map
+	}
+
     fn add_connection(&mut self, connection_id: ConnectionId) -> Result<(), Error> {
         self.visible_connections.insert(connection_id, try!(Connection::new(self.id, connection_id)));
+        Ok(())
+    }
+
+    fn add_channel(&mut self, channel_id: ChannelId) -> Result<(), Error> {
+        self.channels.insert(channel_id, try!(Channel::new(self.id, channel_id)));
         Ok(())
     }
 
@@ -148,6 +201,14 @@ impl Server {
 
     pub fn get_mut_connection(&mut self, connection_id: ConnectionId) -> Option<&mut Connection> {
         self.visible_connections.get_mut(&connection_id)
+    }
+
+    pub fn get_channel(&self, channel_id: ChannelId) -> Option<&Channel> {
+        self.channels.get(&channel_id)
+    }
+
+    pub fn get_mut_channel(&mut self, channel_id: ChannelId) -> Option<&mut Channel> {
+        self.channels.get_mut(&channel_id)
     }
 }
 
@@ -345,6 +406,20 @@ impl TsApi {
             println!("Error {:?} while printing '{}' to '{}' ({:?})", error,
                 message.as_ref(), channel.as_ref(), severity);
         }
+    }
+
+    /// Please try to use the member method `get_error_message` instead of this static method.
+    pub fn static_get_error_message(error: Error) -> Result<String, Error> {
+    	unsafe {
+            let mut message: *mut c_char = std::ptr::null_mut();
+    		let res: Error = transmute((ts3functions.as_ref()
+    			.expect("Functions should be loaded").get_error_message)
+    			(error as u32, &mut message));
+            match res {
+                Error::Ok => Ok(to_string!(message)),
+                _ => Err(res)
+            }
+    	}
     }
 
     // ********** Private Interface **********

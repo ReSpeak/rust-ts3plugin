@@ -12,8 +12,11 @@ default = []
 
 [dependencies]
 chrono = "*"
-lazy_static = "*"
 libc = "*"
+
+# For tests
+[dev-dependencies]
+lazy_static = "*"
 
 # Use `cargo build --features "clippy"` to see style lints
 [dependencies.clippy]

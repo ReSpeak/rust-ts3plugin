@@ -30,8 +30,17 @@ pub trait Plugin {
     fn connect_status_change(&mut self, api: &mut ::TsApi, server_id: ::ServerId, status:
         ::ConnectStatus, error: ::Error) {}
 
-    fn client_connect_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        client_connection_id: ::ConnectionId, connected: bool) {}
+    fn channel_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId) {}
+
+    fn connection_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId) {}
+
+    fn connection_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        client_connection_id: ::ConnectionId, connected: bool, message: String) {}
+
+    fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId) {}
 
     /// Called if the plugin is disabled (either by the user or if TeamSpeak is
     /// exiting).
