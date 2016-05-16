@@ -33,14 +33,19 @@ pub trait Plugin {
     fn channel_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         channel_id: ::ChannelId) {}
 
+    /// If the plugin was informed about a new client. If appeared is true, the client
+    /// was previously not known to the plugin, if appeared is false, the client left
+    /// the view of this client.
     fn connection_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        connection_id: ::ConnectionId) {}
+        connection_id: ::ConnectionId, appeared: bool) {}
 
+    /// Called, if a client connects to the server. This is also called for our own
+    /// client.
     fn connection_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         client_connection_id: ::ConnectionId, connected: bool, message: String) {}
 
     fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId) {}
+        connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId, visibility: ::Visibility) {}
 
     /// Called if the plugin is disabled (either by the user or if TeamSpeak is
     /// exiting).

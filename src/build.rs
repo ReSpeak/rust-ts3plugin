@@ -436,11 +436,12 @@ fn create_server(f: &mut Write) {
             outdated_data: OutdatedServerData,\n\
             optional_data: Option<OptionalServerData>,\n")
         .extra_initialisation("\
-            let uid = try!(Server::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));\n\
+            let uid = try!(Self::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));\n\
+            let own_connection_id = try!(Self::query_own_connection_id(id));\n\
             // These attributes are not in the main struct\n\
-            let hostbanner_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };\n\
-            let hostmessage_mode = unsafe { transmute(try!(Server::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };\n\
-            let hostmessage = try!(Server::get_property_as_string(id, VirtualServerProperties::Hostmessage));\n\n\
+            let hostbanner_mode = unsafe { transmute(try!(Self::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };\n\
+            let hostmessage_mode = unsafe { transmute(try!(Self::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };\n\
+            let hostmessage = try!(Self::get_property_as_string(id, VirtualServerProperties::Hostmessage));\n\n\
 
             //TODO\n\
             let created = UTC::now();\n\
@@ -448,9 +449,9 @@ fn create_server(f: &mut Write) {
             let default_channel_group = Permissions;\n\
             let default_channel_admin_group = Permissions;\n\
             // Query currently visible connections on this server\n\
-            let visible_connections = Server::query_connections(id);\n\
+            let visible_connections = Self::query_connections(id);\n\
             // Query channels on this server\n\
-            let channels = Server::query_channels(id);\n")
+            let channels = Self::query_channels(id);\n")
         .extra_creation("\
             uid: uid,\n\
             visible_connections: visible_connections,\n\
@@ -463,6 +464,7 @@ fn create_server(f: &mut Write) {
         .properties(vec![
             builder.name("id").type_s("ServerId").finalize(),
             builder_string.name("uid").finalize(),
+            builder.name("own_connection_id").type_s("ConnectionId").finalize(),
             builder_string.name("name").finalize(),
             builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
             builder_string.name("platform").finalize(),
@@ -549,9 +551,13 @@ fn create_channel(f: &mut Write) {
     // The real channel data
     let channel = StructBuilder::new().name("Channel")
         .constructor_args("server_id: ServerId, id: ChannelId")
+        .extra_initialisation("\
+            let parent_channel_id = try!(Self::query_parent_channel_id(server_id, id));\n")
         .properties(vec![
             builder.name("id").type_s("ChannelId").finalize(),
             builder.name("server_id").type_s("ServerId").finalize(),
+            builder.name("parent_channel_id").type_s("ChannelId")
+                .documentation("The id of the parent channel, 0 if there is no parent channel").finalize(),
             builder_string.name("name").finalize(),
             builder_string.name("topic").finalize(),
             builder.name("codec").type_s("CodecType").finalize(),
@@ -639,26 +645,15 @@ fn create_connection(f: &mut Write) {
         ]).finalize();
     // Optional connection data
     let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
+        .extra_initialisation("\
+            //let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
         .properties(vec![
             builder_string.name("version").finalize(),
             builder_string.name("platform").finalize(),
             builder.name("created").type_s("DateTime<UTC>").finalize(),
             builder.name("last_connected").type_s("DateTime<UTC>").finalize(),
             builder_i32.name("total_connection").finalize(),
-            builder_i32.name("month_bytes_uploaded").finalize(),
-            builder_i32.name("month_bytes_downloaded").finalize(),
-            builder_i32.name("total_bytes_uploaded").finalize(),
-            builder_i32.name("total_bytes_downloaded").finalize(),
-        ]).finalize();
-    // The real connection data
-    let connection = StructBuilder::new().name("Connection")
-        .constructor_args("server_id: ServerId, id: ConnectionId")
-        .extra_initialisation("\
-            //let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
-        .properties(vec![
-            builder.name("id").type_s("ConnectionId").finalize(),
-            builder.name("server_id").type_s("ServerId").finalize(),
-            /*builder.name("ping").type_s("Duration").finalize(),
+            builder.name("ping").type_s("Duration").finalize(),
             builder.name("ping_deviation").type_s("Duration").finalize(),
             builder.name("connected_time").type_s("Duration").finalize(),
             builder.name("idle_time").type_s("Duration").finalize(),
@@ -684,20 +679,15 @@ fn create_connection(f: &mut Write) {
             builder_u64.name("packetloss_speech").finalize(),
             builder_u64.name("packetloss_keepalive").finalize(),
             builder_u64.name("packetloss_control").finalize(),
-            builder_u64.name("packetloss_total").finalize(),*/
+            builder_u64.name("packetloss_total").finalize(),
             //TODO much more...
             // End network
+            builder_i32.name("month_bytes_uploaded").finalize(),
+            builder_i32.name("month_bytes_downloaded").finalize(),
+            builder_i32.name("total_bytes_uploaded").finalize(),
+            builder_i32.name("total_bytes_downloaded").finalize(),
 
-            // ClientProperties
-            client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
-            client_b_string.name("name").value_name("Nickname").finalize(),
-            client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
-            client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
-            client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
-            client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
-            client_b.name("input_hardware").type_s("HardwareInputStatus").finalize(),
-            client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
-            /*client_b_string.name("default_channel_password").finalize(),
+            client_b_string.name("default_channel_password").finalize(),
             client_b_string.name("server_password").finalize(),
             client_b.name("is_muted").type_s("bool")
                 .documentation("If the client is locally muted.").finalize(),
@@ -710,13 +700,32 @@ fn create_connection(f: &mut Write) {
             client_b_string.name("description").finalize(),
             client_b.name("talker").type_s("bool").value_name("IsTalker").finalize(),
             client_b.name("priority_speaker").type_s("bool").value_name("IsPrioritySpeaker").finalize(),
-            client_b.name("unread_messages").type_s("bool").finalize(),*/
-            client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
-            /*client_b_i32.name("needed_serverquery_view_power").finalize(),
+            client_b.name("unread_messages").type_s("bool").finalize(),
+            client_b_i32.name("needed_serverquery_view_power").finalize(),
             client_b_i32.name("icon_id").finalize(),
             client_b.name("is_channel_commander").type_s("bool").finalize(),
             client_b_string.name("country").finalize(),
-            client_b_string.name("badges").finalize(),*/
+            client_b_string.name("badges").finalize(),
+        ]).finalize();
+    // The real connection data
+    let connection = StructBuilder::new().name("Connection")
+        .constructor_args("server_id: ServerId, id: ConnectionId")
+        .extra_initialisation("\
+            let channel_id = try!(Self::query_channel_id(server_id, id));\n")
+        .properties(vec![
+            builder.name("id").type_s("ConnectionId").finalize(),
+            builder.name("server_id").type_s("ServerId").finalize(),
+            builder.name("channel_id").type_s("ChannelId").finalize(),
+            // ClientProperties
+            client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
+            client_b_string.name("name").value_name("Nickname").finalize(),
+            client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
+            client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
+            client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
+            client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
+            client_b.name("input_hardware").type_s("HardwareInputStatus").finalize(),
+            client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
+            client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
             client_b.name("database_id").type_s("Option<Permissions>")
                 .documentation("Only valid data if we have the appropriate permissions.").finalize(),
             client_b.name("channel_group_id").type_s("Option<Permissions>").finalize(),

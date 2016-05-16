@@ -35,7 +35,7 @@
 //! # fn main() { }
 //! ```
 //!
-//! You also need to add `lazy_static` to the crates dependencies.
+//! You also need to add `lazy_static` to your crates dependencies.
 
 #![allow(dead_code)]
 #![cfg_attr(feature="clippy", feature(plugin))]
@@ -137,57 +137,75 @@ impl Server {
         }
     }
 
-	/// Called when a new Server is created.
-	/// When an error occurs, users are not inserted into the map.
-	fn query_connections(id: ServerId) -> Map<ConnectionId, Connection> {
-		let mut map = Map::new();
-	    // Query connected connections
-	    let mut result: *mut u16 = std::ptr::null_mut();
-	    let res: Error = unsafe { transmute((ts3functions.as_ref()
-	        .expect("Functions should be loaded").get_client_list)
-	            (id.0, &mut result)) };
-	    if res == Error::Ok {
-	        unsafe {
-			    let mut counter = 0;
-			    while *result.offset(counter) != 0 {
-			    	let connection_id = ConnectionId(*result.offset(counter));
-			    	if let Ok(connection) = Connection::new(id, connection_id) {
-				        map.insert(connection_id, connection);
-				    }
-			        counter += 1;
-			    }
-	        }
-	    }
-		map
-	}
+    /// Called when a new Server is created.
+    fn query_own_connection_id(id: ServerId) -> Result<ConnectionId, Error> {
+        unsafe {
+            let mut number: u16 = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_client_id)
+                    (id.0, &mut number));
+            match res {
+                Error::Ok => Ok(ConnectionId(number)),
+                _ => Err(res)
+            }
+        }
+    }
 
-	/// Called when a new Server is created.
-	/// When an error occurs, channels are not inserted into the map.
-	fn query_channels(id: ServerId) -> Map<ChannelId, Channel> {
-		let mut map = Map::new();
-	    // Query connected connections
-	    let mut result: *mut u64 = std::ptr::null_mut();
-	    let res: Error = unsafe { transmute((ts3functions.as_ref()
-	        .expect("Functions should be loaded").get_channel_list)
-	            (id.0, &mut result)) };
-	    if res == Error::Ok {
-	        unsafe {
-	            let mut counter = 0;
-			    while *result.offset(counter) != 0 {
-			    	let channel_id = ChannelId(*result.offset(counter));
-			    	if let Ok(channel) = Channel::new(id, channel_id) {
-				        map.insert(channel_id, channel);
-				    }
-			        counter += 1;
-		        }
-	        }
-	    }
-		map
-	}
+    /// Called when a new Server is created.
+    /// When an error occurs, users are not inserted into the map.
+    fn query_connections(id: ServerId) -> Map<ConnectionId, Connection> {
+        let mut map = Map::new();
+        // Query connected connections
+        let mut result: *mut u16 = std::ptr::null_mut();
+        let res: Error = unsafe { transmute((ts3functions.as_ref()
+            .expect("Functions should be loaded").get_client_list)
+                (id.0, &mut result)) };
+        if res == Error::Ok {
+            unsafe {
+                let mut counter = 0;
+                while *result.offset(counter) != 0 {
+                    let connection_id = ConnectionId(*result.offset(counter));
+                    if let Ok(connection) = Connection::new(id, connection_id) {
+                        map.insert(connection_id, connection);
+                    }
+                    counter += 1;
+                }
+            }
+        }
+        map
+    }
+
+    /// Called when a new Server is created.
+    /// When an error occurs, channels are not inserted into the map.
+    fn query_channels(id: ServerId) -> Map<ChannelId, Channel> {
+        let mut map = Map::new();
+        // Query connected connections
+        let mut result: *mut u64 = std::ptr::null_mut();
+        let res: Error = unsafe { transmute((ts3functions.as_ref()
+            .expect("Functions should be loaded").get_channel_list)
+                (id.0, &mut result)) };
+        if res == Error::Ok {
+            unsafe {
+                let mut counter = 0;
+                while *result.offset(counter) != 0 {
+                    let channel_id = ChannelId(*result.offset(counter));
+                    if let Ok(channel) = Channel::new(id, channel_id) {
+                        map.insert(channel_id, channel);
+                    }
+                    counter += 1;
+                }
+            }
+        }
+        map
+    }
 
     fn add_connection(&mut self, connection_id: ConnectionId) -> Result<(), Error> {
         self.visible_connections.insert(connection_id, try!(Connection::new(self.id, connection_id)));
         Ok(())
+    }
+
+    fn remove_connection(&mut self, connection_id: ConnectionId) -> bool {
+        self.visible_connections.remove(&connection_id).is_some()
     }
 
     fn add_channel(&mut self, channel_id: ChannelId) -> Result<(), Error> {
@@ -255,6 +273,19 @@ impl Channel {
                     (server_id.0, id.0, property as size_t, &mut number));
             match res {
                 Error::Ok => Ok(number as i32),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn query_parent_channel_id(server_id: ServerId, id: ChannelId) -> Result<ChannelId, Error> {
+        unsafe {
+            let mut number: u64 = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_parent_channel_of_channel)
+                    (server_id.0, id.0, &mut number));
+            match res {
+                Error::Ok => Ok(ChannelId(number)),
                 _ => Err(res)
             }
         }
@@ -330,6 +361,19 @@ impl Connection {
                     (server_id.0, id.0, property as size_t, &mut number));
             match res {
                 Error::Ok => Ok(number),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn query_channel_id(server_id: ServerId, id: ConnectionId) -> Result<ChannelId, Error> {
+        unsafe {
+            let mut number: u64 = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_channel_of_client)
+                    (server_id.0, id.0, &mut number));
+            match res {
+                Error::Ok => Ok(ChannelId(number)),
                 _ => Err(res)
             }
         }
@@ -410,16 +454,16 @@ impl TsApi {
 
     /// Please try to use the member method `get_error_message` instead of this static method.
     pub fn static_get_error_message(error: Error) -> Result<String, Error> {
-    	unsafe {
+        unsafe {
             let mut message: *mut c_char = std::ptr::null_mut();
-    		let res: Error = transmute((ts3functions.as_ref()
-    			.expect("Functions should be loaded").get_error_message)
-    			(error as u32, &mut message));
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_error_message)
+                (error as u32, &mut message));
             match res {
                 Error::Ok => Ok(to_string!(message)),
                 _ => Err(res)
             }
-    	}
+        }
     }
 
     // ********** Private Interface **********
