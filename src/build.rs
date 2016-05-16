@@ -691,32 +691,32 @@ fn create_connection(f: &mut Write) {
             // ClientProperties
             client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
             client_b_string.name("name").value_name("Nickname").finalize(),
-            /*client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
+            client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
             client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
             client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("input_hardware").type_s("HardwareInputStatus").finalize(),
             client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
-            client_b_string.name("default_channel_password").finalize(),
+            /*client_b_string.name("default_channel_password").finalize(),
             client_b_string.name("server_password").finalize(),
             client_b.name("is_muted").type_s("bool")
                 .documentation("If the client is locally muted.").finalize(),
             client_b.name("is_recording").type_s("bool").finalize(),
             client_b_i32.name("volume_modificator").finalize(),
-            client_b.name("version_sign").finalize(),
+            client_b.name("version_sign").type_s("bool").finalize(),
             client_b.name("away").type_s("AwayStatus").finalize(),
             client_b_string.name("away_message").finalize(),
             client_b.name("flag_avatar").type_s("bool").finalize(),
             client_b_string.name("description").finalize(),
-            client_b.name("is_talker").type_s("bool").finalize(),
-            client_b.name("is_priority_speaker").type_s("bool").finalize(),
-            client_b.name("has_unread_messages").type_s("bool").finalize(),*/
+            client_b.name("talker").type_s("bool").value_name("IsTalker").finalize(),
+            client_b.name("priority_speaker").type_s("bool").value_name("IsPrioritySpeaker").finalize(),
+            client_b.name("unread_messages").type_s("bool").finalize(),*/
             client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
             /*client_b_i32.name("needed_serverquery_view_power").finalize(),
             client_b_i32.name("icon_id").finalize(),
             client_b.name("is_channel_commander").type_s("bool").finalize(),
             client_b_string.name("country").finalize(),
-            client_b_string.name("badges").finalize(),
+            client_b_string.name("badges").finalize(),*/
             client_b.name("database_id").type_s("Option<Permissions>")
                 .documentation("Only valid data if we have the appropriate permissions.").finalize(),
             client_b.name("channel_group_id").type_s("Option<Permissions>").finalize(),
@@ -724,7 +724,7 @@ fn create_connection(f: &mut Write) {
             client_b.name("talk_power").type_s("Option<i32>").finalize(),
             // When this client requested to talk
             client_b.name("talk_request").type_s("Option<DateTime<UTC>>").finalize(),
-            client_b.name("talk_request_message").type_s("Option<String>").finalize(),*/
+            client_b.name("talk_request_message").type_s("Option<String>").finalize(),
 
             client_b.name("channel_group_inherited_channel_id").type_s("Option<ChannelId>")
                 .documentation("The channel that sets the current channel id of this client.").finalize(),
