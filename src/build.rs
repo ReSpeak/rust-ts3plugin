@@ -25,6 +25,8 @@ struct Property<'a> {
     transmutable: Vec<&'a str>,
     /// Arguments passed to the function
     default_args: &'a str,
+    /// Arguments passed to the function when updating the property
+    default_args_update: &'a str,
 }
 
 impl<'a> Property<'a> {
@@ -41,22 +43,49 @@ impl<'a> Property<'a> {
     fn create_getter(&self) -> String {
         let is_ref_type = ["String", "Permissions"].contains(&self.type_s) || self.type_s.starts_with("Option<");
         let mut s = String::new();
+        // Create the getter
         s.push_str(format!("pub fn get_{}(&self) -> ", self.name).as_str());
         if is_ref_type {
             s.push('&');
         }
         s.push_str(format!("{} {{\n", self.type_s).as_str());
-        let mut body = String::new();
         s.push_str(indent("", 1).as_str());
+        let mut body = String::new();
         if is_ref_type {
             body.push('&');
         }
         body.push_str(format!("self.{}\n", self.name).as_str());
         s.push_str(format!("{}}}\n", indent(body, 1)).as_str());
+
+        // Create a mut getter for more complicated types
+        let is_complicated_type = ["Permissions"].contains(&self.type_s) || self.type_s.starts_with("Option<") && is_ref_type;
+        if is_complicated_type {
+            s.push_str(format!("pub fn get_mut_{}(&mut self) -> &mut {} {{\n", self.name, self.type_s).as_str());
+            s.push_str(indent("", 1).as_str());
+            s.push_str(indent(format!("&mut self.{}\n", self.name), 1).as_str());
+            s.push_str("}\n");
+        }
+
+        s
+    }
+
+    fn create_update(&self) -> String {
+        let mut s = String::new();
+        let initialisation = self.intern_create_initialisation(self.default_args_update);
+        if !initialisation.is_empty() {
+            // Create the update function
+            s.push_str(format!("fn update_{}(&mut self) -> Result<(), Error> {{\n", self.name).as_str());
+            s.push_str(indent(format!("self.{} = {};\nOk(())\n", self.name, initialisation), 1).as_str());
+            s.push_str("}\n");
+        }
         s
     }
 
     fn create_initialisation(&self) -> String {
+        self.intern_create_initialisation(self.default_args)
+    }
+
+    fn intern_create_initialisation(&self, default_args: &str) -> String {
         if !self.initialize {
             return String::new();
         }
@@ -65,17 +94,17 @@ impl<'a> Property<'a> {
         // Ignore unknown types
         if let Some(function) = self.method_name {
             // Special defined function
-            s.push_str(format!("try!(Self::{}({}{}::{}))", function, self.default_args,
+            s.push_str(format!("try!({}({}{}::{}))", function, default_args,
                 self.enum_name, value_name).as_str());
         } else if let Some(function) = self.functions.get(self.type_s) {
             // From function list
-            s.push_str(format!("try!(Self::{}({}{}::{}))", function, self.default_args,
+            s.push_str(format!("try!({}({}{}::{}))", function, default_args,
                 self.enum_name, value_name).as_str());
         } else if self.transmutable.contains(&self.type_s) {
             // Try to get an int
             for t in &["i32", "u64"] {
                 if let Some(function) = self.functions.get(t) {
-                    s.push_str(format!("unsafe {{ transmute(try!(Self::{}({}{}::{}))) }}", function, self.default_args,
+                    s.push_str(format!("unsafe {{ transmute(try!({}({}{}::{}))) }}", function, default_args,
                         self.enum_name, value_name).as_str());
                     break;
                 }
@@ -91,14 +120,14 @@ impl<'a> Property<'a> {
                     } else {
                         "get_property_as_int"
                     };
-                    s.push_str(format!("Duration::seconds(try!(Self::{}({}{}::{})) as i64)",
-                        function, self.default_args, self.enum_name, value_name).as_str())
+                    s.push_str(format!("Duration::seconds(try!({}({}{}::{})) as i64)",
+                        function, default_args, self.enum_name, value_name).as_str())
                 },
                 "bool" => {
                     for t in &["i32", "u64"] {
                         if let Some(function) = self.functions.get(t) {
-                            s.push_str(format!("try!(Self::{}({}{}::{})) != 0", function,
-                                self.default_args, self.enum_name, value_name).as_str());
+                            s.push_str(format!("try!({}({}{}::{})) != 0", function,
+                                default_args, self.enum_name, value_name).as_str());
                             break;
                         }
                     }
@@ -124,6 +153,7 @@ struct PropertyBuilder<'a> {
     functions: Map<&'a str, &'a str>,
     transmutable: Vec<&'a str>,
     default_args: &'a str,
+    default_args_update: &'a str,
 }
 
 impl<'a> PropertyBuilder<'a> {
@@ -193,6 +223,12 @@ impl<'a> PropertyBuilder<'a> {
         res
     }
 
+    fn default_args_update(&self, default_args_update: &'a str) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.default_args_update = default_args_update;
+        res
+    }
+
     fn finalize(&self) -> Property<'a> {
         Property {
             name: self.name,
@@ -205,6 +241,7 @@ impl<'a> PropertyBuilder<'a> {
             functions: self.functions.clone(),
             transmutable: self.transmutable.clone(),
             default_args: self.default_args,
+            default_args_update: self.default_args_update,
         }
     }
 }
@@ -319,6 +356,16 @@ impl<'a> Struct<'a> {
         result
     }
 
+    fn create_update(&self) -> String {
+        let mut s = String::new();
+        for prop in &self.properties {
+            s.push_str(prop.create_update().as_str());
+        }
+        let mut result = String::new();
+        write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
+        result
+    }
+
     /// struct_name: Name of the struct
     /// properties_name: Name of the properties enum
     /// args: Base args (id) to get properties
@@ -361,8 +408,8 @@ fn create_server(f: &mut Write) {
     // Map types to functions that will get that type
     let default_functions = {
         let mut m = Map::new();
-        m.insert("i32", "get_property_as_int");
-        m.insert("String", "get_property_as_string");
+        m.insert("i32", "Server::get_property_as_int");
+        m.insert("String", "Server::get_property_as_string");
         m
     };
     let transmutable = vec!["CodecEncryptionMode"];
@@ -371,6 +418,7 @@ fn create_server(f: &mut Write) {
         .functions(default_functions)
         .transmutable(transmutable)
         .default_args("id, ")
+        .default_args_update("self.id, ")
         .enum_name("VirtualServerProperties");
     let builder_string = builder.type_s("String");
     let builder_i32 = builder.type_s("i32");
@@ -436,7 +484,6 @@ fn create_server(f: &mut Write) {
             outdated_data: OutdatedServerData,\n\
             optional_data: Option<OptionalServerData>,\n")
         .extra_initialisation("\
-            let uid = try!(Self::get_property_as_string(id, VirtualServerProperties::UniqueIdentifier));\n\
             let own_connection_id = try!(Self::query_own_connection_id(id));\n\
             // These attributes are not in the main struct\n\
             let hostbanner_mode = unsafe { transmute(try!(Self::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };\n\
@@ -453,7 +500,6 @@ fn create_server(f: &mut Write) {
             // Query channels on this server\n\
             let channels = Self::query_channels(id);\n")
         .extra_creation("\
-            uid: uid,\n\
             visible_connections: visible_connections,\n\
             channels: channels,\n\
             outdated_data: OutdatedServerData {\n\
@@ -463,7 +509,7 @@ fn create_server(f: &mut Write) {
             optional_data: None,\n")
         .properties(vec![
             builder.name("id").type_s("ServerId").finalize(),
-            builder_string.name("uid").finalize(),
+            builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
             builder.name("own_connection_id").type_s("ConnectionId").finalize(),
             builder_string.name("name").finalize(),
             builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
@@ -506,29 +552,19 @@ impl Server {
         &self.optional_data
     }
 }\n\n".as_bytes()).unwrap();
+    f.write_all(server.create_update().as_bytes()).unwrap();
 
-    // Constructors
-    //f.write_all(optional_server_data.create_constructor("id: ServerId", &default_functions, "id, ", "VirtualServerProperties").as_bytes()).unwrap();
-
-    // Initialize variables and ignore uid because it has another name
-    {
-        let mut ss = vec![server.properties[0].clone()];
-        ss.extend_from_slice(&server.properties[2..]);
-        let s = Struct {
-            properties: ss,
-            ..server
-        };
-        f.write_all(s.create_constructor().as_bytes()).unwrap();
-    }
+    // Initialize variables
+    f.write_all(server.create_constructor().as_bytes()).unwrap();
 }
 
 fn create_channel(f: &mut Write) {
     // Map types to functions that will get that type
     let default_functions = {
         let mut m = Map::new();
-        m.insert("i32", "get_property_as_int");
-        m.insert("u64", "get_property_as_uint64");
-        m.insert("String", "get_property_as_string");
+        m.insert("i32", "Channel::get_property_as_int");
+        m.insert("u64", "Channel::get_property_as_uint64");
+        m.insert("String", "Channel::get_property_as_string");
         m
     };
     let transmutable = vec!["CodecType"];
@@ -537,16 +573,23 @@ fn create_channel(f: &mut Write) {
         .functions(default_functions)
         .transmutable(transmutable)
         .default_args("server_id, id, ")
+        .default_args_update("self.server_id, self.id, ")
         .enum_name("ChannelProperties");
     let builder_string = builder.type_s("String");
     let builder_i32 = builder.type_s("i32");
     let builder_bool = builder.type_s("bool");
+    let builder_optional_data = builder
+        .default_args("server_id, channel_id, ")
+        .default_args_update("self.server_id, self.channel_id, ");
 
     // Optional channel data
     let optional_channel_data = StructBuilder::new().name("OptionalChannelData")
         .documentation("Channel properties that have to be fetched explicitely")
+        .constructor_args("server_id: ServerId, channel_id: ChannelId")
         .properties(vec![
-            builder_string.name("description").finalize(),
+            builder_optional_data.name("channel_id").type_s("ChannelId").finalize(),
+            builder_optional_data.name("server_id").type_s("ServerId").finalize(),
+            builder_optional_data.name("description").type_s("String").finalize(),
         ]).finalize();
     // The real channel data
     let channel = StructBuilder::new().name("Channel")
@@ -592,7 +635,10 @@ fn create_channel(f: &mut Write) {
 
     // Implementations
     f.write_all(optional_channel_data.create_impl().as_bytes()).unwrap();
+    f.write_all(optional_channel_data.create_update().as_bytes()).unwrap();
+    f.write_all(optional_channel_data.create_constructor().as_bytes()).unwrap();
     f.write_all(channel.create_impl().as_bytes()).unwrap();
+    f.write_all(channel.create_update().as_bytes()).unwrap();
     f.write_all(channel.create_constructor().as_bytes()).unwrap();
 }
 
@@ -600,15 +646,15 @@ fn create_connection(f: &mut Write) {
     // Map types to functions that will get that type
     let default_functions = {
         let mut m = Map::new();
-        m.insert("i32", "get_connection_property_as_uint64");
-        m.insert("u64", "get_connection_property_as_uint64");
-        m.insert("String", "get_connection_property_as_string");
+        m.insert("i32", "Connection::get_connection_property_as_uint64");
+        m.insert("u64", "Connection::get_connection_property_as_uint64");
+        m.insert("String", "Connection::get_connection_property_as_string");
         m
     };
     let client_functions = {
         let mut m = Map::new();
-        m.insert("i32", "get_client_property_as_int");
-        m.insert("String", "get_client_property_as_string");
+        m.insert("i32", "Connection::get_client_property_as_int");
+        m.insert("String", "Connection::get_client_property_as_string");
         m
     };
     let transmutable = vec!["InputDeactivationStatus", "TalkStatus",
@@ -619,6 +665,7 @@ fn create_connection(f: &mut Write) {
         .functions(default_functions)
         .transmutable(transmutable)
         .default_args("server_id, id, ")
+        .default_args_update("self.server_id, self.id, ")
         .enum_name("ConnectionProperties");
     let builder_string = builder.type_s("String");
     let builder_i32 = builder.type_s("i32");
@@ -711,7 +758,8 @@ fn create_connection(f: &mut Write) {
     let connection = StructBuilder::new().name("Connection")
         .constructor_args("server_id: ServerId, id: ConnectionId")
         .extra_initialisation("\
-            let channel_id = try!(Self::query_channel_id(server_id, id));\n")
+            let channel_id = try!(Self::query_channel_id(server_id, id));\n\
+            let whispering = try!(Self::query_whispering(server_id, id));\n")
         .properties(vec![
             builder.name("id").type_s("ConnectionId").finalize(),
             builder.name("server_id").type_s("ServerId").finalize(),
@@ -720,6 +768,7 @@ fn create_connection(f: &mut Write) {
             client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
             client_b_string.name("name").value_name("Nickname").finalize(),
             client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
+            client_b.name("whispering").type_s("bool").initialize(false).finalize(),
             client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
             client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
@@ -755,6 +804,7 @@ fn create_connection(f: &mut Write) {
     f.write_all(serverquery_connection_data.create_impl().as_bytes()).unwrap();
     f.write_all(optional_connection_data.create_impl().as_bytes()).unwrap();
     f.write_all(connection.create_impl().as_bytes()).unwrap();
+    f.write_all(connection.create_update().as_bytes()).unwrap();
 
     // Constructors
     //f.write_all(own_connection_data.create_constructor("id: ClientId", &default_functions, "id, ", "ConnectionProperties").as_bytes()).unwrap();

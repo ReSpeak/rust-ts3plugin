@@ -10,6 +10,9 @@ Add the following to your `Cargo.toml`:
 name = "<pluginname>"
 crate-type = ["dylib"]
 
+[dependencies]
+lazy_static = "*"
+
 [dependencies.ts3plugin]
 git = "https://github.com/Flakebi/rust-ts3plugin"
 ```
@@ -18,6 +21,8 @@ This code can be used to make your library a TeamSpeak plugin:
 ```
 #[macro_use]
 extern crate ts3plugin;
+#[macro_use]
+extern crate lazy_static;
 
 use ts3plugin::*;
 

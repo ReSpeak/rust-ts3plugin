@@ -30,22 +30,76 @@ pub trait Plugin {
     fn connect_status_change(&mut self, api: &mut ::TsApi, server_id: ::ServerId, status:
         ::ConnectStatus, error: ::Error) {}
 
-    fn channel_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        channel_id: ::ChannelId) {}
+    fn server_stop(&mut self, api: &mut ::TsApi, server_id: ::ServerId, message: String) {}
 
-    /// If the plugin was informed about a new client. If appeared is true, the client
-    /// was previously not known to the plugin, if appeared is false, the client left
-    /// the view of this client.
+    fn server_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        error: ::Error, message: String, return_code: String, extra_message: String) {}
+
+    fn server_edited(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        invoker: ::Invoker) {}
+
+    fn connection_updated(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, old_connection: Option<::Connection>, invoker: ::Invoker) {}
+
+    /// If the plugin was informed about a new connection. If appeared is true, the connection
+    /// was previously not known to the plugin, if appeared is false, the connection left
+    /// the view of connection.
     fn connection_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, appeared: bool) {}
 
-    /// Called, if a client connects to the server. This is also called for our own
-    /// client.
+    /// Called, if a connection connects to the server. This is also called for our own
+    /// connection.
     fn connection_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        client_connection_id: ::ConnectionId, connected: bool, message: String) {}
+        connection_id: ::ConnectionId, connected: bool, message: String) {}
 
     fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId, visibility: ::Visibility) {}
+        connection_id: ::ConnectionId, old_channel_id: ::ChannelId,
+        new_channel_id: ::ChannelId, visibility: ::Visibility) {}
+
+    fn connection_timeout(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId) {}
+
+    fn channel_announced(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId) {}
+
+    fn channel_description_updated(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId) {}
+
+    fn channel_updated(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId, old_channel: Option<::Channel>) {}
+
+    fn channel_created(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId, invoker: ::Invoker) {}
+
+    fn channel_deleted(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId, invoker: ::Invoker) {}
+
+    fn channel_edited(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId, old_channel: Option<::Channel>, invoker: ::Invoker) {}
+
+    fn channel_password_updated(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId) {}
+
+    /// The current parent id of the channel is the old one, the new
+    /// parent id is given as a parameter.
+    fn channel_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        channel_id: ::ChannelId, new_parent_channel_id: ::ChannelId,
+        invoker: ::Invoker) {}
+
+    fn message(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+        target: ::MessageReceiver, message: String) {}
+
+    fn channel_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId,
+        visibility: ::Visibility, invoker: ::Invoker, message: String) {}
+
+    fn server_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, invoker: ::Invoker, message: String) {}
+
+    /// The old values of `talking` and `whispering` are available from the connection.
+    /// They will be updated after this functions returned.
+    fn talking_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, talking: ::TalkStatus, whispering: bool) {}
 
     /// Called if the plugin is disabled (either by the user or if TeamSpeak is
     /// exiting).

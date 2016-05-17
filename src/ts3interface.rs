@@ -13,9 +13,25 @@ static mut TX: Option<*const Sender<FunctionCall>> = None;
 
 enum FunctionCall {
     ConnectStatusChange(::ServerId, ConnectStatus, Error),
+    ServerStop(::ServerId, String),
+    ServerError(::ServerId, ::Error, String, String, String),
+    ServerEdited(::ServerId, ::Invoker),
+    ConnectionUpdated(::ServerId, ::ConnectionId, ::Invoker),
+    ConnectionMove(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
+    ConnectionSubscribed(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility),
+    ConnectionTimeout(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
     ChannelAnnounced(::ServerId, ::ChannelId, ::ChannelId),
-    ClientMove(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
-    ClientSubscribed(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility),
+    ChannelDescriptionUpdate(::ServerId, ::ChannelId),
+    ChannelUpdate(::ServerId, ::ChannelId),
+    ChannelEdited(::ServerId, ::ChannelId, ::Invoker),
+    ChannelCreated(::ServerId, ::ChannelId, ::ChannelId, ::Invoker),
+    ChannelDeleted(::ServerId, ::ChannelId, ::Invoker),
+    ChannelPasswordUpdate(::ServerId, ::ChannelId),
+    ChannelMove(::ServerId, ::ChannelId, ::ChannelId, ::Invoker),
+    Message(::ServerId, ::TextMessageTargetMode, u16, ::Invoker, String),
+    ChannelKick(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, ::Invoker, String),
+    ServerKick(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, ::Invoker, String),
+    TalkStatusChanged(::ServerId, ::ConnectionId, ::TalkStatus, bool),
     Quit
 }
 
@@ -37,7 +53,8 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                 // and don't have that server cached already.
                 if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
                     if let Err(error) = api.add_server(server_id) {
-                        api.log_or_print(format!("Can't get server information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
+                        api.log_or_print(format!("Can't get server information: {:?}",
+                                         error), "rust-ts3plugin", ::LogLevel::Error)
                     }
                 }
                 // Execute plugin callback
@@ -47,42 +64,73 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                     api.remove_server(server_id);
                 }
             },
-            FunctionCall::ChannelAnnounced(server_id, channel_id, _) => {
-                let err = {
-                    let server = api.get_mut_server(server_id).unwrap();
-                    server.add_channel(channel_id).err()
-                };
-                if let Some(error) = err {
-                    api.log_or_print(format!("Can't get channel information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error)
+            FunctionCall::ServerStop(server_id, message) => {
+                plugin.server_stop(&mut api, server_id, message);
+            },
+            FunctionCall::ServerError(server_id, error, message, return_code, extra_message) => {
+                plugin.server_error(&mut api, server_id, error, message, return_code, extra_message);
+            },
+            FunctionCall::ServerEdited(server_id, invoker) => {
+                plugin.server_edited(&mut api, server_id, invoker);
+            },
+            FunctionCall::ConnectionUpdated(server_id, connection_id, invoker) => {
+                // Save the old connection
+                let mut old_connection;
+                if let Err(error) = {
+                        let mut server = api.get_mut_server(server_id).unwrap();
+                        // Try to get the old channel
+                        old_connection = server.remove_connection(connection_id);
+                        match server.add_connection(connection_id) {
+                            Ok(_) => {
+                                let mut connection = server.get_mut_connection(connection_id).unwrap();
+                                if let Some(ref mut old_connection) = old_connection {
+                                    // Copy optional data from old connection if it exists
+                                    //TODO do that with the build script
+                                    connection.database_id = old_connection.database_id.take();
+                                    connection.channel_group_id = old_connection.channel_group_id.take();
+                                    connection.server_groups = old_connection.server_groups.take();
+                                    connection.talk_power = old_connection.talk_power.take();
+                                    connection.talk_request = old_connection.talk_request.take();
+                                    connection.talk_request_message = old_connection.talk_request_message.take();
+                                    connection.channel_group_inherited_channel_id =
+                                        old_connection.channel_group_inherited_channel_id.take();
+                                    connection.own_data = old_connection.own_data.take();
+                                    connection.serverquery_data = old_connection.serverquery_data.take();
+                                    connection.optional_data = old_connection.optional_data.take();
+                                }
+                                Ok(())
+                            },
+                            Err(error) => Err(error),
+                        }
+                    } {
+                    api.log_or_print(format!("Can't get connection information: {:?}", error),
+                                     "rust-ts3plugin", ::LogLevel::Error)
+                } else {
+                    plugin.connection_updated(&mut api, server_id, connection_id, old_connection, invoker);
                 }
-                plugin.channel_announced(&mut api, server_id, channel_id);
-            }
-            FunctionCall::ClientMove(server_id, connection_id, old_channel_id, new_channel_id, visibility, move_message) => {
+            },
+            FunctionCall::ConnectionMove(server_id, connection_id, old_channel_id,
+                                     new_channel_id, visibility, move_message) => {
                 if old_channel_id == ::ChannelId(0) {
-                    // Client connected, this will also be called for ourselves
-                    let err = {
-                        let server = api.get_mut_server(server_id).unwrap();
-                        server.add_connection(connection_id)
-                    };
+                    // Connection connected, this will also be called for ourselves
+                    let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                     if let Err(error) = err {
-                        api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error);
+                        api.log_or_print(format!("Can't get connection information: {:?}",
+                                         error), "rust-ts3plugin", ::LogLevel::Error);
                     }
                     plugin.connection_changed(&mut api, server_id, connection_id, true, move_message)
                 } else if new_channel_id == ::ChannelId(0) {
-                    // Client disconnected
+                    // Connection disconnected
                     plugin.connection_changed(&mut api, server_id, connection_id, false, move_message);
-                    let server = api.get_mut_server(server_id).unwrap();
-                    server.remove_connection(connection_id);
+                    api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
                 } else if old_channel_id == new_channel_id {
-                    // Client announced
+                    // Connection announced
                     match visibility {
                         Visibility::Enter => {
-                            let err = {
-                                let server = api.get_mut_server(server_id).unwrap();
-                                server.add_connection(connection_id)
-                            };
+                            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                             if let Err(error) = err {
-                                api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error);
+                                api.log_or_print(format!("Can't get connection information: {:?}",
+                                                 error), "rust-ts3plugin", ::LogLevel::Error);
                             }
                             plugin.connection_announced(&mut api, server_id, connection_id, true);
                         },
@@ -93,41 +141,38 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                         Visibility::Retain => {}
                     }
                 } else {
-                    // Client switched channel
-                    // Add the client if he entered visibility
+                    // Connection switched channel
+                    // Add the connection if it entered visibility
                     if visibility == Visibility::Enter {
-                        let err = {
-                            let server = api.get_mut_server(server_id).unwrap();
-                            server.add_connection(connection_id)
-                        };
+                        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                         if let Err(error) = err {
-                            api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error);
+                            api.log_or_print(format!("Can't get connection information: {:?}",
+                                             error), "rust-ts3plugin", ::LogLevel::Error);
                         }
                     }
                     // Update the channel
                     {
-                        if let Some(ref mut connection) = api.get_mut_server(server_id).unwrap().get_mut_connection(connection_id) {
+                        if let Some(connection) = api.get_mut_server(server_id)
+                            .unwrap().get_mut_connection(connection_id) {
                             connection.channel_id = new_channel_id;
                         }
                     }
-                    plugin.connection_moved(&mut api, server_id, connection_id, old_channel_id, new_channel_id, visibility);
-                    // Remove the client if he left visibility
+                    plugin.connection_moved(&mut api, server_id, connection_id,
+                                            old_channel_id, new_channel_id, visibility);
+                    // Remove the connection if it left visibility
                     if visibility == Visibility::Leave {
-                        let server = api.get_mut_server(server_id).unwrap();
-                        server.remove_connection(connection_id);
+                        api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
                     }
                 }
             },
-            FunctionCall::ClientSubscribed(server_id, connection_id, _, _, visibility) => {
-                // Client announced
+            FunctionCall::ConnectionSubscribed(server_id, connection_id, _, _, visibility) => {
+                // Connection announced
                 match visibility {
                     Visibility::Enter => {
-                        let err = {
-                            let server = api.get_mut_server(server_id).unwrap();
-                            server.add_connection(connection_id)
-                        };
+                        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                         if let Err(error) = err {
-                            api.log_or_print(format!("Can't get connection information: {:?}", error), "rust-ts3plugin", ::LogLevel::Error);
+                            api.log_or_print(format!("Can't get connection information: {:?}",
+                                                     error), "rust-ts3plugin", ::LogLevel::Error);
                         }
                         plugin.connection_announced(&mut api, server_id, connection_id, true);
                     },
@@ -136,6 +181,156 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                         api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
                     },
                     Visibility::Retain => {}
+                }
+            },
+            FunctionCall::ConnectionTimeout(server_id, connection_id, _, _, _, _) => {
+                plugin.connection_timeout(&mut api, server_id, connection_id);
+                api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+            },
+            FunctionCall::ChannelAnnounced(server_id, channel_id, _) => {
+                let err = api.get_mut_server(server_id).unwrap().add_channel(channel_id).err();
+                if let Some(error) = err {
+                    api.log_or_print(format!("Can't get channel information: {:?}",
+                                     error), "rust-ts3plugin", ::LogLevel::Error)
+                }
+                plugin.channel_announced(&mut api, server_id, channel_id);
+            }
+            FunctionCall::ChannelDescriptionUpdate(server_id, channel_id) => {
+                // Seems like I really like constructions like that, I failed to do it simpler
+                // because I can't borrow api to print an error message in the inner part.
+                if let Err(error) = if let Some(channel) = api.get_mut_server(server_id)
+                            .unwrap().get_mut_channel(channel_id) {
+                        if channel.get_optional_data().is_none() {
+                            match ::OptionalChannelData::new(server_id, channel_id) {
+                                Ok(data) => {
+                                    channel.optional_data = Some(data);
+                                    Ok(())
+                                },
+                                Err(error) => Err(error),
+                            }
+                        } else {
+                            channel.get_mut_optional_data().as_mut().unwrap().update_description()
+                        }
+                    } else {
+                        Ok(())
+                    } {
+                    api.log_or_print(format!("Can't get channel description: {:?}", error),
+                                     "rust-ts3plugin", ::LogLevel::Error)
+                }
+                plugin.channel_description_updated(&mut api, server_id, channel_id);
+            },
+            FunctionCall::ChannelUpdate(server_id, channel_id) => {
+                let mut old_channel;
+                if let Err(error) = {
+                        let mut server = api.get_mut_server(server_id).unwrap();
+                        // Try to get the old channel
+                        old_channel = server.remove_channel(channel_id);
+                        match server.add_channel(channel_id) {
+                            Ok(_) => {
+                                let mut channel = server.get_mut_channel(channel_id).unwrap();
+                                if let Some(ref mut old_channel) = old_channel {
+                                    // Copy optional data from old channel if it exists
+                                    channel.optional_data = old_channel.optional_data.take();
+                                }
+                                Ok(())
+                            },
+                            Err(error) => Err(error),
+                        }
+                    } {
+                    api.log_or_print(format!("Can't get channel information: {:?}", error),
+                                     "rust-ts3plugin", ::LogLevel::Error)
+                } else {
+                    plugin.channel_updated(&mut api, server_id, channel_id, old_channel);
+                }
+            },
+            FunctionCall::ChannelCreated(server_id, channel_id, _, invoker) => {
+                if let Err(error) = api.get_mut_server(server_id).unwrap()
+                    .add_channel(channel_id) {
+                    api.log_or_print(format!("Can't get channel information: {:?}", error),
+                                     "rust-ts3plugin", ::LogLevel::Error)
+                }
+                plugin.channel_created(&mut api, server_id, channel_id, invoker);
+            },
+            FunctionCall::ChannelDeleted(server_id, channel_id, invoker) => {
+                if api.get_mut_server(server_id).unwrap().remove_channel(channel_id).is_none() {
+                    api.log_or_print("Can't remove channel", "rust-ts3plugin", ::LogLevel::Error)
+                }
+                plugin.channel_deleted(&mut api, server_id, channel_id, invoker);
+            },
+            FunctionCall::ChannelEdited(server_id, channel_id, invoker) => {
+                let mut old_channel;
+                if let Err(error) = {
+                        let mut server = api.get_mut_server(server_id).unwrap();
+                        // Try to get the old channel
+                        old_channel = server.remove_channel(channel_id);
+                        match server.add_channel(channel_id) {
+                            Ok(_) => {
+                                let mut channel = server.get_mut_channel(channel_id).unwrap();
+                                if let Some(ref mut old_channel) = old_channel {
+                                    // Copy optional data from old channel if it exists
+                                    channel.optional_data = old_channel.optional_data.take();
+                                }
+                                Ok(())
+                            },
+                            Err(error) => Err(error),
+                        }
+                    } {
+                    api.log_or_print(format!("Can't get channel information: {:?}", error),
+                                     "rust-ts3plugin", ::LogLevel::Error)
+                } else {
+                    plugin.channel_edited(&mut api, server_id, channel_id, old_channel,
+                                          invoker);
+                }
+            },
+            FunctionCall::ChannelPasswordUpdate(server_id, channel_id) => {
+                plugin.channel_password_updated(&mut api, server_id, channel_id);
+            },
+            FunctionCall::ChannelMove(server_id, channel_id, new_parent_channel_id, invoker) => {
+                plugin.channel_moved(&mut api, server_id, channel_id, new_parent_channel_id, invoker);
+                if let Some(channel) = api.get_mut_server(server_id).unwrap().get_mut_channel(channel_id) {
+                    channel.parent_channel_id = new_parent_channel_id;
+                }
+            },
+            FunctionCall::Message(server_id, target_mode, receiver_id, invoker, message) => {
+                match target_mode {
+                    ::TextMessageTargetMode::Client => plugin.message(&mut api,
+                        server_id, invoker, ::MessageReceiver::Connection(
+                            ::ConnectionId(receiver_id)), message),
+                    ::TextMessageTargetMode::Channel => plugin.message(&mut api,
+                        server_id, invoker, ::MessageReceiver::Channel(
+                            ::ChannelId(receiver_id as u64)), message),
+                    ::TextMessageTargetMode::Server => plugin.message(&mut api,
+                        server_id, invoker, ::MessageReceiver::Server, message),
+                    _ => api.log_or_print("Got invalid TextMessageTargetMode",
+                                          "rust-ts3plugin", ::LogLevel::Error)
+                }
+            },
+            FunctionCall::ChannelKick(server_id, connection_id, old_channel_id,
+                                      new_channel_id, visibility, invoker, message) => {
+                plugin.channel_kick(&mut api, server_id, connection_id, old_channel_id,
+                                    new_channel_id, visibility, invoker, message);
+                // Remove the kicked connection if it is not visible anymore
+                if visibility == ::Visibility::Leave {
+                    api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                } else {
+                    // Update the current channel of the connection
+                    if let Some(connection) = api.get_mut_server(server_id).unwrap()
+                        .get_mut_connection(connection_id) {
+                        connection.channel_id = new_channel_id;
+                    }
+                }
+            },
+            FunctionCall::ServerKick(server_id, connection_id, _, _, _, invoker, message) => {
+                plugin.server_kick(&mut api, server_id, connection_id, invoker, message);
+                // Remove the kicked connection
+                api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+            },
+            FunctionCall::TalkStatusChanged(server_id, connection_id, talking, whispering) => {
+                plugin.talking_changed(&mut api, server_id, connection_id, talking, whispering);
+                // Update the connection
+                if let Some(connection) = api.get_mut_server(server_id).unwrap().get_mut_connection(connection_id) {
+                    connection.talking = talking;
+                    connection.whispering = whispering;
                 }
             },
             FunctionCall::Quit => {
@@ -177,27 +372,216 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64, status: c_int, error: c_uint) {
-    (*TX.unwrap()).send(FunctionCall::ConnectStatusChange(::ServerId(server_id), transmute(status), transmute(error))).unwrap()
+pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
+    status: c_int, error: c_uint) {
+    (*TX.unwrap()).send(FunctionCall::ConnectStatusChange(::ServerId(server_id),
+        transmute(status), transmute(error))).unwrap()
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id: u64, parent_channel_id: u64) {
-    (*TX.unwrap()).send(FunctionCall::ChannelAnnounced(::ServerId(server_id), ::ChannelId(channel_id), ::ChannelId(parent_channel_id))).unwrap()
+pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ServerStop(::ServerId(server_id), to_string!(message)
+        )).unwrap()
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
-    (*TX.unwrap()).send(FunctionCall::ClientMove(::ServerId(server_id), ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id), transmute(visibility), to_string!(move_message))).unwrap()
+pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(server_id: u64,
+    message: *const c_char, error: c_uint, return_code: *const c_char,
+    extra_message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ServerError(::ServerId(server_id),
+        transmute(error), to_string!(message), to_string!(return_code),
+        to_string!(extra_message))).unwrap()
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int) {
-    (*TX.unwrap()).send(FunctionCall::ClientSubscribed(::ServerId(server_id), ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id), transmute(visibility))).unwrap()
+pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
+    invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ServerEdited(::ServerId(server_id),
+        ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
+    connection_id: u16, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionUpdated(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::Invoker::new(::ConnectionId(invoker_id),
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_id: u16,
+    old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionMove(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id),
+        transmute(visibility), to_string!(move_message))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(server_id: u64,
+    connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionSubscribed(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
+        ::ChannelId(new_channel_id), transmute(visibility))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(server_id: u64,
+    connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int,
+    timeout_message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionTimeout(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
+        ::ChannelId(new_channel_id), transmute(visibility), to_string!(timeout_message)
+        )).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id: u64,
+    parent_channel_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ChannelAnnounced(::ServerId(server_id),
+        ::ChannelId(channel_id), ::ChannelId(parent_channel_id))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u64,
+    channel_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ChannelDescriptionUpdate(::ServerId(server_id),
+        ::ChannelId(channel_id))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64,
+    channel_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ChannelUpdate(::ServerId(server_id),
+        ::ChannelId(channel_id))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(server_id: u64,
+    channel_id: u64, parent_channel_id: u64, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ChannelCreated(::ServerId(server_id),
+        ::ChannelId(channel_id), ::ChannelId(parent_channel_id),
+        ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(server_id: u64,
+    channel_id: u64, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ChannelDeleted(::ServerId(server_id),
+        ::ChannelId(channel_id), ::Invoker::new(::ConnectionId(invoker_id),
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(server_id: u64,
+    channel_id: u64, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ChannelEdited(::ServerId(server_id),
+        ::ChannelId(channel_id), ::Invoker::new(::ConnectionId(invoker_id),
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onChannelPasswordChangedEvent(server_id: u64,
+    channel_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ChannelPasswordUpdate(::ServerId(server_id),
+        ::ChannelId(channel_id))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
+    channel_id: u64, new_parent_channel_id: u64, invoker_id: u16,
+    invoker_name: *const c_char, invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ChannelMove(::ServerId(server_id),
+        ::ChannelId(channel_id), ::ChannelId(new_parent_channel_id),
+        ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)))).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onTextMessageEvent(server_id: u64,
+    target_mode: u16, receiver_id: u16, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char, message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::Message(::ServerId(server_id),
+        transmute(target_mode as i32), receiver_id, ::Invoker::new(::ConnectionId(invoker_id),
+            to_string!(invoker_uid), to_string!(invoker_name)), to_string!(message)
+        )).unwrap()
+}
+
+// Ignore clippy warnings, we can't change the TeamSpeak interface
+#[allow(unknown_lints, too_many_arguments)]
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(server_id: u64,
+    connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int,
+    invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
+    message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ChannelKick(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
+        ::ChannelId(new_channel_id), transmute(visibility), ::Invoker::new(
+            ::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)), to_string!(message)
+        )).unwrap()
+}
+
+#[allow(unknown_lints, too_many_arguments)]
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(server_id: u64,
+    connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int,
+    invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
+    message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ServerKick(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
+        ::ChannelId(new_channel_id), transmute(visibility), ::Invoker::new(
+            ::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)), to_string!(message)
+        )).unwrap()
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(server_id: u64,
+    talking: c_int, whispering: c_int, connection_id: u16) {
+    (*TX.unwrap()).send(FunctionCall::TalkStatusChanged(::ServerId(server_id),
+        ::ConnectionId(connection_id), transmute(talking), whispering != 0)).unwrap()
 }

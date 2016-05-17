@@ -88,6 +88,22 @@ pub struct TsApi {
     servers: Map<ServerId, Server>,
 }
 
+/// A struct for convenience. The invoker is maybe not visible to the user,
+/// but we can get events caused by him, so some information about him
+/// are passed along with his id.
+#[derive(Eq)]
+pub struct Invoker {
+    id: ConnectionId,
+    uid: String,
+    name: String,
+}
+
+pub enum MessageReceiver {
+    Connection(ConnectionId),
+    Channel(ChannelId),
+    Server,
+}
+
 pub struct Permissions;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -101,6 +117,35 @@ pub struct ConnectionId(u16);
 
 
 // ******************** Implementation ********************
+
+// ********** Invoker **********
+impl PartialEq<Invoker> for Invoker {
+    fn eq(&self, other: &Invoker) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Invoker {
+    fn new(id: ConnectionId, uid: String, name: String) -> Invoker {
+        Invoker {
+            id: id,
+            uid: uid,
+            name: name,
+        }
+    }
+
+    pub fn get_id(&self) -> ConnectionId {
+        self.id
+    }
+
+    pub fn get_uid(&self) -> &String {
+        &self.uid
+    }
+
+    pub fn get_name(&self) -> &String {
+        &self.name
+    }
+}
 
 // ********** Server **********
 impl PartialEq<Server> for Server {
@@ -204,13 +249,17 @@ impl Server {
         Ok(())
     }
 
-    fn remove_connection(&mut self, connection_id: ConnectionId) -> bool {
-        self.visible_connections.remove(&connection_id).is_some()
+    fn remove_connection(&mut self, connection_id: ConnectionId) -> Option<Connection> {
+        self.visible_connections.remove(&connection_id)
     }
 
     fn add_channel(&mut self, channel_id: ChannelId) -> Result<(), Error> {
         self.channels.insert(channel_id, try!(Channel::new(self.id, channel_id)));
         Ok(())
+    }
+
+    fn remove_channel(&mut self, channel_id: ChannelId) -> Option<Channel> {
+        self.channels.remove(&channel_id)
     }
 
     pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {
@@ -374,6 +423,19 @@ impl Connection {
                     (server_id.0, id.0, &mut number));
             match res {
                 Error::Ok => Ok(ChannelId(number)),
+                _ => Err(res)
+            }
+        }
+    }
+
+    fn query_whispering(server_id: ServerId, id: ConnectionId) -> Result<bool, Error> {
+        unsafe {
+            let mut number: c_int = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").is_whispering)
+                    (server_id.0, id.0, &mut number));
+            match res {
+                Error::Ok => Ok(number != 0),
                 _ => Err(res)
             }
         }
