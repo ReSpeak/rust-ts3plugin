@@ -34,7 +34,7 @@ pub trait Plugin {
 
     /// Return `false` if the TeamSpeak client should handle the error normally or
     /// `true` if the client should ignore the error.
-    fn server_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+    fn server_error(&mut self, api: &::TsApi, server_id: ::ServerId,
         error: ::Error, message: String, return_code: String,
         extra_message: String) -> bool { false }
 
@@ -98,14 +98,14 @@ pub trait Plugin {
     /// of TeamSpeak ignored the message.
     /// Return `false` if the TeamSpeak client should handle the message normally or
     /// `true` if the client should ignore the message.
-    fn message(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+    fn message(&mut self, api: &::TsApi, server_id: ::ServerId, invoker: ::Invoker,
         target: ::MessageReceiver, message: String, ignored: bool) -> bool { false }
 
     /// A user poked us. `ignored` describes, if the friend and fool system
     /// of TeamSpeak ignored the message.
     /// Return `false` if the TeamSpeak client should handle the poke normally or
     /// `true` if the client should ignore the poke.
-    fn poke(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+    fn poke(&mut self, api: &::TsApi, server_id: ::ServerId, invoker: ::Invoker,
         message: String, ignored: bool) -> bool { false }
 
     fn channel_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
@@ -138,7 +138,7 @@ pub trait Plugin {
 
     /// Return `false` if the TeamSpeak client should handle the error normally or
     /// `true` if the client should ignore the error.
-    fn permission_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+    fn permission_error(&mut self, api: &::TsApi, server_id: ::ServerId,
         permission_id: ::PermissionId, error: ::Error, message: String,
         return_code: String) -> bool { false }
 
@@ -159,8 +159,7 @@ pub trait Plugin {
 ///  - configurable - If the plugin offers the possibility to be configured
 ///  - autoload     - If the plugin should be loaded by default or only if
 ///                   activated manually
-///  - typename     - The type of the class that implements the plugin and has a
-///                   `new()`-function
+///  - typename     - The type of the class that implements the plugin
 ///
 /// # Examples
 ///
@@ -185,39 +184,13 @@ macro_rules! create_plugin {
         #[no_mangle]
         #[doc(hidden)]
         pub extern "C" fn ts3plugin_init() -> c_int {
-            // Create TsApi
-            let mut api = $crate::TsApi::new();
-            // And load all currently available data.
-            match api.load() {
-                Ok(_) => {
-                    // Create a new plugin instance
-                    match $typename::new(&api) {
-                        Ok(plugin) => {
-                            let (transmitter, receiver) = std::sync::mpsc::channel();
-                            // Start manager thread
-                            std::thread::spawn(move || $crate::ts3interface::manager_thread(
-                                plugin, transmitter, api));
-                            // Wait until manager thread started up
-                            match receiver.recv() {
-                                Ok(_) => 0,
-                                Err(error) => {
-                                    println!("Can't start manager thread: {:?}", error);
-                                    1
-                                }
-                            }
-                        },
-                        Err(error) => match error {
-                            $crate::InitError::Failure =>           1,
-                            $crate::InitError::FailureNoMessage => -2
-                        }
-                    }
-                },
-                Err(error) => {
-                    api.log_or_print(format!(
-                        "Can't create TsApi: {:?}", error),
-                        "rust-ts3plugin", $crate::LogLevel::Error);
-                    1
-                }
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move ||
+                $crate::ts3interface::manager_thread::<$typename>(sender));
+            match receiver.recv().unwrap() {
+                Ok(_) => 0,
+                Err($crate::InitError::Failure) => 1,
+                Err($crate::InitError::FailureNoMessage) => -2,
             }
         }
 

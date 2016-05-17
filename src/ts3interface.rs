@@ -54,15 +54,35 @@ enum ReturningCall {
     Poke(::ServerId, ::Invoker, String, bool),
 }
 
-/// Manager thread
+/// The manager thread calls plugin functions on events.
+/// T is the plugin type.
 #[doc(hidden)]
-pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut api: ::TsApi) {
+pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError>>) {
+    // Create channel where we will receive the events from TeamSpeak callbacks
     let (tx, rx) = channel();
     unsafe {
         TX = Some(&tx)
     }
-    // Send that we are ready
-    main_transmitter.send(()).unwrap();
+    // Create the TsApi
+    let mut api = ::TsApi::new();
+    if let Err(error) = api.load() {
+        api.log_or_print(format!("Can't create TsApi: {:?}", error),
+            "rust-ts3plugin", ::LogLevel::Error);
+        main_transmitter.send(Err(::InitError::Failure)).unwrap();
+        return;
+    }
+    // Create the plugin
+    let mut plugin: Box<Plugin> = match T::new(&api) {
+        Ok(plugin) => {
+            // Send that we are ready
+            main_transmitter.send(Ok(())).unwrap();
+            plugin
+        },
+        Err(error) => {
+            main_transmitter.send(Err(error)).unwrap();
+            return;
+        }
+    };
 
     // Wait for messages
     loop {
@@ -365,12 +385,14 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                     connection, server_group_id, invoker);
             },
             FunctionCall::ReturningCall(sender, call) => {
+                // Don't forget: The api should not be borrowed mutable
+                // to the plugin functions.
                 sender.send(match call {
                     ReturningCall::ServerError(server_id, error, message, return_code, extra_message) => {
-                        ReturnValue(plugin.server_error(&mut api, server_id, error, message, return_code, extra_message))
+                        ReturnValue(plugin.server_error(&api, server_id, error, message, return_code, extra_message))
                     },
                     ReturningCall::PermissionError(server_id, permission_id, error, message, return_code) => {
-                        ReturnValue(plugin.permission_error(&mut api, server_id, permission_id, error,
+                        ReturnValue(plugin.permission_error(&api, server_id, permission_id, error,
                             message, return_code))
                     },
                     ReturningCall::Message(server_id, target_mode, receiver_id, invoker, message, ignored) => {
@@ -386,11 +408,11 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                                 ::MessageReceiver::Server
                             }
                         };
-                        ReturnValue(plugin.message(&mut api, server_id, invoker, message_receiver, message, ignored))
+                        ReturnValue(plugin.message(&api, server_id, invoker, message_receiver, message, ignored))
 
                     },
                     ReturningCall::Poke(server_id, invoker, message, ignored) => {
-                        ReturnValue(plugin.poke(&mut api, server_id, invoker, message, ignored))
+                        ReturnValue(plugin.poke(&api, server_id, invoker, message, ignored))
                     },
                 }).unwrap();
             },
