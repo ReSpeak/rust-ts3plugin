@@ -32,11 +32,19 @@ pub trait Plugin {
 
     fn server_stop(&mut self, api: &mut ::TsApi, server_id: ::ServerId, message: String) {}
 
+    /// Return `false` if the TeamSpeak client should handle the error normally or
+    /// `true` if the client should ignore the error.
     fn server_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
-        error: ::Error, message: String, return_code: String, extra_message: String) {}
+        error: ::Error, message: String, return_code: String,
+        extra_message: String) -> bool { false }
 
     fn server_edited(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         invoker: ::Invoker) {}
+
+    fn server_connection_info(&mut self, api: &mut ::TsApi, server_id: ::ServerId) {}
+
+    fn connection_info(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId) {}
 
     fn connection_updated(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, old_connection: Option<::Connection>, invoker: ::Invoker) {}
@@ -86,8 +94,19 @@ pub trait Plugin {
         channel_id: ::ChannelId, new_parent_channel_id: ::ChannelId,
         invoker: ::Invoker) {}
 
+    /// A message was received. `ignored` describes, if the friend and fool system
+    /// of TeamSpeak ignored the message.
+    /// Return `false` if the TeamSpeak client should handle the message normally or
+    /// `true` if the client should ignore the message.
     fn message(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
-        target: ::MessageReceiver, message: String) {}
+        target: ::MessageReceiver, message: String, ignored: bool) -> bool { false }
+
+    /// A user poked us. `ignored` describes, if the friend and fool system
+    /// of TeamSpeak ignored the message.
+    /// Return `false` if the TeamSpeak client should handle the poke normally or
+    /// `true` if the client should ignore the poke.
+    fn poke(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+        message: String, ignored: bool) -> bool { false }
 
     fn channel_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId,
@@ -96,10 +115,32 @@ pub trait Plugin {
     fn server_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, invoker: ::Invoker, message: String) {}
 
+    fn server_ban(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, invoker: ::Invoker, message: String, time: u64) {}
+
     /// The old values of `talking` and `whispering` are available from the connection.
     /// They will be updated after this functions returned.
     fn talking_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, talking: ::TalkStatus, whispering: bool) {}
+
+    fn avatar_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, path: Option<String>) {}
+
+    fn connection_channel_group_changed(&mut self, api: &mut ::TsApi,
+        server_id: ::ServerId, connection_id: ::ConnectionId, channel_group_id: ::ChannelGroupId,
+        channel_id: ::ChannelId, invoker: ::Invoker) {}
+
+    fn connection_server_group_added(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection: ::Invoker, server_group_id: ::ServerGroupId, invoker: ::Invoker) {}
+
+    fn connection_server_group_removed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection: ::Invoker, server_group_id: ::ServerGroupId, invoker: ::Invoker) {}
+
+    /// Return `false` if the TeamSpeak client should handle the error normally or
+    /// `true` if the client should ignore the error.
+    fn permission_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        permission_id: ::PermissionId, error: ::Error, message: String,
+        return_code: String) -> bool { false }
 
     /// Called if the plugin is disabled (either by the user or if TeamSpeak is
     /// exiting).

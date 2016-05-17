@@ -393,13 +393,13 @@ impl<'a> Struct<'a> {
         }
 
         let mut result = String::new();
-        write!(result, "impl {0} {{\n\
-               \tfn new({1}) -> Result<{0}, Error> {{\n\
-               {2}\n\
-               \t\tOk({0} {{\n\
-               {3}\
-               \t\t}})\n\
-               \t}}\n}}\n\n", self.name, self.constructor_args, indent(inits, 2), indent(creats, 3)).unwrap();
+        write!(result, "impl {0} {{
+    fn new({1}) -> Result<{0}, Error> {{
+{2}
+        Ok({0} {{
+{3}
+        }})
+    }}\n}}\n\n", self.name, self.constructor_args, indent(inits, 2), indent(creats, 3)).unwrap();
         result
     }
 }
@@ -502,9 +502,9 @@ fn create_server(f: &mut Write) {
         .extra_creation("\
             visible_connections: visible_connections,\n\
             channels: channels,\n\
-            outdated_data: OutdatedServerData {\n\
-                \thostmessage: hostmessage,\n\
-                \thostmessage_mode: hostmessage_mode,\n\
+            outdated_data: OutdatedServerData {
+    hostmessage: hostmessage,
+    hostmessage_mode: hostmessage_mode,\n\
             },\n\
             optional_data: None,\n")
         .properties(vec![
@@ -738,12 +738,9 @@ fn create_connection(f: &mut Write) {
             client_b_string.name("server_password").finalize(),
             client_b.name("is_muted").type_s("bool")
                 .documentation("If the client is locally muted.").finalize(),
-            client_b.name("is_recording").type_s("bool").finalize(),
             client_b_i32.name("volume_modificator").finalize(),
             client_b.name("version_sign").type_s("bool").finalize(),
-            client_b.name("away").type_s("AwayStatus").finalize(),
-            client_b_string.name("away_message").finalize(),
-            client_b.name("flag_avatar").type_s("bool").finalize(),
+            client_b.name("avatar").type_s("bool").value_name("FlagAvatar").finalize(),
             client_b_string.name("description").finalize(),
             client_b.name("talker").type_s("bool").value_name("IsTalker").finalize(),
             client_b.name("priority_speaker").type_s("bool").value_name("IsPrioritySpeaker").finalize(),
@@ -769,12 +766,15 @@ fn create_connection(f: &mut Write) {
             client_b_string.name("name").value_name("Nickname").finalize(),
             client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
             client_b.name("whispering").type_s("bool").initialize(false).finalize(),
+            client_b.name("away").type_s("AwayStatus").finalize(),
+            client_b_string.name("away_message").finalize(),
             client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
             client_b.name("output_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("output_only_muted").type_s("MuteOutputStatus").finalize(),
             client_b.name("input_hardware").type_s("HardwareInputStatus").finalize(),
             client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
             client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
+            client_b.name("recording").type_s("bool").value_name("IsRecording").finalize(),
             client_b.name("database_id").type_s("Option<Permissions>")
                 .documentation("Only valid data if we have the appropriate permissions.").finalize(),
             client_b.name("channel_group_id").type_s("Option<Permissions>").finalize(),
@@ -850,7 +850,9 @@ fn indent<S: AsRef<str>>(s: S, count: usize) -> String {
     let line_count = sref.lines().count();
     let mut result = String::with_capacity(sref.len() + line_count * count * 4);
     for l in sref.lines() {
-        result.push_str(std::iter::repeat("    ").take(count).collect::<String>().as_str());
+        if !l.is_empty() {
+            result.push_str(std::iter::repeat("    ").take(count).collect::<String>().as_str());
+        }
         result.push_str(l);
         result.push('\n');
     }

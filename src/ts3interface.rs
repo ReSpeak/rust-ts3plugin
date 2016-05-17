@@ -14,8 +14,9 @@ static mut TX: Option<*const Sender<FunctionCall>> = None;
 enum FunctionCall {
     ConnectStatusChange(::ServerId, ConnectStatus, Error),
     ServerStop(::ServerId, String),
-    ServerError(::ServerId, ::Error, String, String, String),
     ServerEdited(::ServerId, ::Invoker),
+    ServerConnectionInfo(::ServerId),
+    ConnectionInfo(::ServerId, ::ConnectionId),
     ConnectionUpdated(::ServerId, ::ConnectionId, ::Invoker),
     ConnectionMove(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
     ConnectionSubscribed(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility),
@@ -23,16 +24,34 @@ enum FunctionCall {
     ChannelAnnounced(::ServerId, ::ChannelId, ::ChannelId),
     ChannelDescriptionUpdate(::ServerId, ::ChannelId),
     ChannelUpdate(::ServerId, ::ChannelId),
-    ChannelEdited(::ServerId, ::ChannelId, ::Invoker),
     ChannelCreated(::ServerId, ::ChannelId, ::ChannelId, ::Invoker),
     ChannelDeleted(::ServerId, ::ChannelId, ::Invoker),
+    ChannelEdited(::ServerId, ::ChannelId, ::Invoker),
     ChannelPasswordUpdate(::ServerId, ::ChannelId),
     ChannelMove(::ServerId, ::ChannelId, ::ChannelId, ::Invoker),
-    Message(::ServerId, ::TextMessageTargetMode, u16, ::Invoker, String),
     ChannelKick(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, ::Invoker, String),
     ServerKick(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, ::Invoker, String),
+    ServerBan(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, ::Invoker, String, u64),
     TalkStatusChanged(::ServerId, ::ConnectionId, ::TalkStatus, bool),
+    AvatarChanged(::ServerId, ::ConnectionId, Option<String>),
+    ConnectionChannelGroupChanged(::ServerId, ::ConnectionId, ::ChannelGroupId, ::ChannelId, ::Invoker),
+    ConnectionServerGroupAdded(::ServerId, ::Invoker, ::ServerGroupId, ::Invoker),
+    ConnectionServerGroupRemoved(::ServerId, ::Invoker, ::ServerGroupId, ::Invoker),
+    /// Some functions request a return value. The return value should be passed
+    /// through the sender.
+    /// IMPORTANT: In cases where a return value is needed, the plugins shouldn't
+    /// get a mutable reference to the api, but only a constant reference.
+    ReturningCall(Sender<ReturnValue>, ReturningCall),
     Quit
+}
+
+struct ReturnValue(bool);
+
+enum ReturningCall {
+    ServerError(::ServerId, ::Error, String, String, String),
+    PermissionError(::ServerId, ::PermissionId, ::Error, String, String),
+    Message(::ServerId, ::TextMessageTargetMode, u16, ::Invoker, String, bool),
+    Poke(::ServerId, ::Invoker, String, bool),
 }
 
 /// Manager thread
@@ -67,11 +86,14 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
             FunctionCall::ServerStop(server_id, message) => {
                 plugin.server_stop(&mut api, server_id, message);
             },
-            FunctionCall::ServerError(server_id, error, message, return_code, extra_message) => {
-                plugin.server_error(&mut api, server_id, error, message, return_code, extra_message);
-            },
             FunctionCall::ServerEdited(server_id, invoker) => {
                 plugin.server_edited(&mut api, server_id, invoker);
+            },
+            FunctionCall::ServerConnectionInfo(server_id) => {
+                plugin.server_connection_info(&mut api, server_id);
+            },
+            FunctionCall::ConnectionInfo(server_id, connection_id) => {
+                plugin.connection_info(&mut api, server_id, connection_id);
             },
             FunctionCall::ConnectionUpdated(server_id, connection_id, invoker) => {
                 // Save the old connection
@@ -291,20 +313,6 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                     channel.parent_channel_id = new_parent_channel_id;
                 }
             },
-            FunctionCall::Message(server_id, target_mode, receiver_id, invoker, message) => {
-                match target_mode {
-                    ::TextMessageTargetMode::Client => plugin.message(&mut api,
-                        server_id, invoker, ::MessageReceiver::Connection(
-                            ::ConnectionId(receiver_id)), message),
-                    ::TextMessageTargetMode::Channel => plugin.message(&mut api,
-                        server_id, invoker, ::MessageReceiver::Channel(
-                            ::ChannelId(receiver_id as u64)), message),
-                    ::TextMessageTargetMode::Server => plugin.message(&mut api,
-                        server_id, invoker, ::MessageReceiver::Server, message),
-                    _ => api.log_or_print("Got invalid TextMessageTargetMode",
-                                          "rust-ts3plugin", ::LogLevel::Error)
-                }
-            },
             FunctionCall::ChannelKick(server_id, connection_id, old_channel_id,
                                       new_channel_id, visibility, invoker, message) => {
                 plugin.channel_kick(&mut api, server_id, connection_id, old_channel_id,
@@ -325,6 +333,11 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                 // Remove the kicked connection
                 api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
             },
+            FunctionCall::ServerBan(server_id, connection_id, _, _, _, invoker, message, time) => {
+                plugin.server_ban(&mut api, server_id, connection_id, invoker, message, time);
+                // Remove the kicked connection
+                api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+            },
             FunctionCall::TalkStatusChanged(server_id, connection_id, talking, whispering) => {
                 plugin.talking_changed(&mut api, server_id, connection_id, talking, whispering);
                 // Update the connection
@@ -332,6 +345,54 @@ pub fn manager_thread(mut plugin: Box<Plugin>, main_transmitter: Sender<()>, mut
                     connection.talking = talking;
                     connection.whispering = whispering;
                 }
+            },
+            FunctionCall::AvatarChanged(server_id, connection_id, path) => {
+                plugin.avatar_changed(&mut api, server_id, connection_id, path);
+            },
+            FunctionCall::ConnectionChannelGroupChanged(server_id, connection,
+                channel_group_id, channel_id, invoker) => {
+                plugin.connection_channel_group_changed(&mut api, server_id,
+                    connection, channel_group_id, channel_id, invoker);
+            },
+            FunctionCall::ConnectionServerGroupAdded(server_id, connection,
+                server_group_id, invoker) => {
+                plugin.connection_server_group_added(&mut api, server_id,
+                    connection, server_group_id, invoker);
+            },
+            FunctionCall::ConnectionServerGroupRemoved(server_id, connection,
+                server_group_id, invoker) => {
+                plugin.connection_server_group_removed(&mut api, server_id,
+                    connection, server_group_id, invoker);
+            },
+            FunctionCall::ReturningCall(sender, call) => {
+                sender.send(match call {
+                    ReturningCall::ServerError(server_id, error, message, return_code, extra_message) => {
+                        ReturnValue(plugin.server_error(&mut api, server_id, error, message, return_code, extra_message))
+                    },
+                    ReturningCall::PermissionError(server_id, permission_id, error, message, return_code) => {
+                        ReturnValue(plugin.permission_error(&mut api, server_id, permission_id, error,
+                            message, return_code))
+                    },
+                    ReturningCall::Message(server_id, target_mode, receiver_id, invoker, message, ignored) => {
+                        let message_receiver = match target_mode {
+                            ::TextMessageTargetMode::Client =>
+                                ::MessageReceiver::Connection(::ConnectionId(receiver_id)),
+                            ::TextMessageTargetMode::Channel =>
+                                ::MessageReceiver::Channel(::ChannelId(receiver_id as u64)),
+                            ::TextMessageTargetMode::Server => ::MessageReceiver::Server,
+                            _ => {
+                                api.log_or_print("Got invalid TextMessageTargetMode",
+                                                 "rust-ts3plugin", ::LogLevel::Error);
+                                ::MessageReceiver::Server
+                            }
+                        };
+                        ReturnValue(plugin.message(&mut api, server_id, invoker, message_receiver, message, ignored))
+
+                    },
+                    ReturningCall::Poke(server_id, invoker, message, ignored) => {
+                        ReturnValue(plugin.poke(&mut api, server_id, invoker, message, ignored))
+                    },
+                }).unwrap();
             },
             FunctionCall::Quit => {
                 plugin.shutdown(&api);
@@ -375,7 +436,7 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
     status: c_int, error: c_uint) {
     (*TX.unwrap()).send(FunctionCall::ConnectStatusChange(::ServerId(server_id),
-        transmute(status), transmute(error))).unwrap()
+        transmute(status), transmute(error))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -383,7 +444,7 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ServerStop(::ServerId(server_id), to_string!(message)
-        )).unwrap()
+        )).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -391,10 +452,13 @@ pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *c
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(server_id: u64,
     message: *const c_char, error: c_uint, return_code: *const c_char,
-    extra_message: *const c_char) {
-    (*TX.unwrap()).send(FunctionCall::ServerError(::ServerId(server_id),
+    extra_message: *const c_char) -> c_int {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender, ReturningCall::ServerError(::ServerId(server_id),
         transmute(error), to_string!(message), to_string!(return_code),
-        to_string!(extra_message))).unwrap()
+        to_string!(extra_message)))).unwrap();
+    let ReturnValue(b) = receiver.recv().unwrap();
+    if b { 1 } else { 0 }
 }
 
 #[allow(non_snake_case)]
@@ -404,7 +468,22 @@ pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
     invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ServerEdited(::ServerId(server_id),
         ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
-            to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_name)))).unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onServerConnectionInfoEvent(server_id: u64) {
+    (*TX.unwrap()).send(FunctionCall::ServerConnectionInfo(::ServerId(server_id))).unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onConnectionInfoEvent(server_id: u64, connection_id: u16) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionInfo(::ServerId(server_id),
+        ::ConnectionId(connection_id))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -415,7 +494,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
     invoker_uid: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ConnectionUpdated(::ServerId(server_id),
         ::ConnectionId(connection_id), ::Invoker::new(::ConnectionId(invoker_id),
-            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -425,7 +504,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
     old_channel_id: u64, new_channel_id: u64, visibility: c_int, move_message: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ConnectionMove(::ServerId(server_id),
         ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id),
-        transmute(visibility), to_string!(move_message))).unwrap()
+        transmute(visibility), to_string!(move_message))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -435,7 +514,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(server_id: u64,
     connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int) {
     (*TX.unwrap()).send(FunctionCall::ConnectionSubscribed(::ServerId(server_id),
         ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
-        ::ChannelId(new_channel_id), transmute(visibility))).unwrap()
+        ::ChannelId(new_channel_id), transmute(visibility))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -447,7 +526,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(server_id: u64,
     (*TX.unwrap()).send(FunctionCall::ConnectionTimeout(::ServerId(server_id),
         ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
         ::ChannelId(new_channel_id), transmute(visibility), to_string!(timeout_message)
-        )).unwrap()
+        )).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -456,7 +535,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(server_id: u64,
 pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id: u64,
     parent_channel_id: u64) {
     (*TX.unwrap()).send(FunctionCall::ChannelAnnounced(::ServerId(server_id),
-        ::ChannelId(channel_id), ::ChannelId(parent_channel_id))).unwrap()
+        ::ChannelId(channel_id), ::ChannelId(parent_channel_id))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -465,7 +544,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id:
 pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u64,
     channel_id: u64) {
     (*TX.unwrap()).send(FunctionCall::ChannelDescriptionUpdate(::ServerId(server_id),
-        ::ChannelId(channel_id))).unwrap()
+        ::ChannelId(channel_id))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -474,7 +553,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u6
 pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64,
     channel_id: u64) {
     (*TX.unwrap()).send(FunctionCall::ChannelUpdate(::ServerId(server_id),
-        ::ChannelId(channel_id))).unwrap()
+        ::ChannelId(channel_id))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -486,7 +565,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(server_id: u64,
     (*TX.unwrap()).send(FunctionCall::ChannelCreated(::ServerId(server_id),
         ::ChannelId(channel_id), ::ChannelId(parent_channel_id),
         ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
-            to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_name)))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -497,7 +576,7 @@ pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(server_id: u64,
     invoker_uid: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ChannelDeleted(::ServerId(server_id),
         ::ChannelId(channel_id), ::Invoker::new(::ConnectionId(invoker_id),
-            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -508,7 +587,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(server_id: u64,
     invoker_uid: *const c_char) {
     (*TX.unwrap()).send(FunctionCall::ChannelEdited(::ServerId(server_id),
         ::ChannelId(channel_id), ::Invoker::new(::ConnectionId(invoker_id),
-            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -517,7 +596,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(server_id: u64,
 pub unsafe extern "C" fn ts3plugin_onChannelPasswordChangedEvent(server_id: u64,
     channel_id: u64) {
     (*TX.unwrap()).send(FunctionCall::ChannelPasswordUpdate(::ServerId(server_id),
-        ::ChannelId(channel_id))).unwrap()
+        ::ChannelId(channel_id))).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -529,19 +608,39 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
     (*TX.unwrap()).send(FunctionCall::ChannelMove(::ServerId(server_id),
         ::ChannelId(channel_id), ::ChannelId(new_parent_channel_id),
         ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
-            to_string!(invoker_name)))).unwrap()
+            to_string!(invoker_name)))).unwrap();
 }
 
+#[allow(unknown_lints, too_many_arguments)]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onTextMessageEvent(server_id: u64,
     target_mode: u16, receiver_id: u16, invoker_id: u16, invoker_name: *const c_char,
-    invoker_uid: *const c_char, message: *const c_char) {
-    (*TX.unwrap()).send(FunctionCall::Message(::ServerId(server_id),
-        transmute(target_mode as i32), receiver_id, ::Invoker::new(::ConnectionId(invoker_id),
-            to_string!(invoker_uid), to_string!(invoker_name)), to_string!(message)
-        )).unwrap()
+    invoker_uid: *const c_char, message: *const c_char, ignored: c_int) -> c_int {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::Message(::ServerId(server_id), transmute(target_mode as i32),
+        receiver_id, ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)), to_string!(message),
+        ignored != 0))).unwrap();
+    let ReturnValue(b) = receiver.recv().unwrap();
+    if b { 1 } else { 0 }
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(server_id: u64,
+    invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
+    message: *const c_char, ignored: c_int) -> c_int {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::Poke(::ServerId(server_id),
+        ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+        to_string!(invoker_name)), to_string!(message), ignored != 0))).unwrap();
+    let ReturnValue(b) = receiver.recv().unwrap();
+    if b { 1 } else { 0 }
 }
 
 // Ignore clippy warnings, we can't change the TeamSpeak interface
@@ -558,7 +657,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(server_id: u64,
         ::ChannelId(new_channel_id), transmute(visibility), ::Invoker::new(
             ::ConnectionId(invoker_id), to_string!(invoker_uid),
             to_string!(invoker_name)), to_string!(message)
-        )).unwrap()
+        )).unwrap();
 }
 
 #[allow(unknown_lints, too_many_arguments)]
@@ -574,7 +673,23 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(server_id: u64,
         ::ChannelId(new_channel_id), transmute(visibility), ::Invoker::new(
             ::ConnectionId(invoker_id), to_string!(invoker_uid),
             to_string!(invoker_name)), to_string!(message)
-        )).unwrap()
+        )).unwrap();
+}
+
+#[allow(unknown_lints, too_many_arguments)]
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientBanFromServerEvent(server_id: u64,
+    connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int,
+    invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
+    time: u64, message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ServerBan(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id),
+        ::ChannelId(new_channel_id), transmute(visibility), ::Invoker::new(
+            ::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)), to_string!(message), time
+        )).unwrap();
 }
 
 #[allow(non_snake_case)]
@@ -583,5 +698,72 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(server_id: u64,
 pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(server_id: u64,
     talking: c_int, whispering: c_int, connection_id: u16) {
     (*TX.unwrap()).send(FunctionCall::TalkStatusChanged(::ServerId(server_id),
-        ::ConnectionId(connection_id), transmute(talking), whispering != 0)).unwrap()
+        ::ConnectionId(connection_id), transmute(talking), whispering != 0)).unwrap();
+}
+
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onAvatarUpdated(server_id: u64,
+    connection_id: u16, avatar_path: *const c_char) {
+    let path = if avatar_path.is_null() { None } else { Some(to_string!(avatar_path)) };
+    (*TX.unwrap()).send(FunctionCall::AvatarChanged(::ServerId(server_id),
+        ::ConnectionId(connection_id), path)).unwrap();
+}
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(server_id: u64,
+    channel_group_id: u64, channel_id: u64, connection_id: u16, invoker_id: u16,
+    invoker_name: *const c_char, invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionChannelGroupChanged(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelGroupId(channel_group_id),
+        ::ChannelId(channel_id), ::Invoker::new(::ConnectionId(invoker_id),
+        to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
+}
+
+#[allow(unknown_lints, too_many_arguments)]
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(server_id: u64,
+    connection_id: u16, connection_name: *const c_char, connection_uid: *const c_char,
+    server_group_id: u64, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionServerGroupAdded(
+        ::ServerId(server_id), ::Invoker::new(::ConnectionId(connection_id),
+        to_string!(connection_uid), to_string!(connection_name)),
+        ::ServerGroupId(server_group_id), ::Invoker::new(::ConnectionId(invoker_id),
+        to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
+}
+
+#[allow(unknown_lints, too_many_arguments)]
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onServerGroupClientDeletedEvent(server_id: u64,
+    connection_id: u16, connection_name: *const c_char, connection_uid: *const c_char,
+    server_group_id: u64, invoker_id: u16, invoker_name: *const c_char,
+    invoker_uid: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionServerGroupRemoved(
+        ::ServerId(server_id), ::Invoker::new(::ConnectionId(connection_id),
+        to_string!(connection_uid), to_string!(connection_name)),
+        ::ServerGroupId(server_group_id), ::Invoker::new(::ConnectionId(invoker_id),
+        to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onServerPermissionErrorEvent(server_id: u64,
+    message: *const c_char, error: c_uint, return_code: *const c_char,
+    permission_id: c_uint) -> c_int {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::PermissionError(::ServerId(server_id),
+        ::PermissionId(permission_id), transmute(error), to_string!(message),
+        to_string!(return_code)))).unwrap();
+    let ReturnValue(b) = receiver.recv().unwrap();
+    if b { 1 } else { 0 }
 }

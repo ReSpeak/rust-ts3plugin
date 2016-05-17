@@ -115,6 +115,15 @@ pub struct ChannelId(u64);
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ConnectionId(u16);
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct PermissionId(u32);
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct ServerGroupId(u64);
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct ChannelGroupId(u64);
+
 
 // ******************** Implementation ********************
 
