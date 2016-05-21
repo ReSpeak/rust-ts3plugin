@@ -107,6 +107,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 plugin.server_stop(&mut api, server_id, message);
             },
             FunctionCall::ServerEdited(server_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.server_edited(&mut api, server_id, invoker);
             },
             FunctionCall::ServerConnectionInfo(server_id) => {
@@ -116,6 +117,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 plugin.connection_info(&mut api, server_id, connection_id);
             },
             FunctionCall::ConnectionUpdated(server_id, connection_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 // Save the old connection
                 let mut old_connection;
                 if let Err(error) = {
@@ -286,6 +288,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 }
             },
             FunctionCall::ChannelCreated(server_id, channel_id, _, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 if let Err(error) = api.get_mut_server(server_id).unwrap()
                     .add_channel(channel_id) {
                     api.log_or_print(format!("Can't get channel information: {:?}", error),
@@ -294,12 +297,14 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 plugin.channel_created(&mut api, server_id, channel_id, invoker);
             },
             FunctionCall::ChannelDeleted(server_id, channel_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 if api.get_mut_server(server_id).unwrap().remove_channel(channel_id).is_none() {
                     api.log_or_print("Can't remove channel", "rust-ts3plugin", ::LogLevel::Error)
                 }
                 plugin.channel_deleted(&mut api, server_id, channel_id, invoker);
             },
             FunctionCall::ChannelEdited(server_id, channel_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 let mut old_channel;
                 if let Err(error) = {
                         let mut server = api.get_mut_server(server_id).unwrap();
@@ -328,6 +333,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 plugin.channel_password_updated(&mut api, server_id, channel_id);
             },
             FunctionCall::ChannelMove(server_id, channel_id, new_parent_channel_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.channel_moved(&mut api, server_id, channel_id, new_parent_channel_id, invoker);
                 if let Some(channel) = api.get_mut_server(server_id).unwrap().get_mut_channel(channel_id) {
                     channel.parent_channel_id = new_parent_channel_id;
@@ -335,6 +341,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             },
             FunctionCall::ChannelKick(server_id, connection_id, old_channel_id,
                                       new_channel_id, visibility, invoker, message) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.channel_kick(&mut api, server_id, connection_id, old_channel_id,
                                     new_channel_id, visibility, invoker, message);
                 // Remove the kicked connection if it is not visible anymore
@@ -349,11 +356,13 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 }
             },
             FunctionCall::ServerKick(server_id, connection_id, _, _, _, invoker, message) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.server_kick(&mut api, server_id, connection_id, invoker, message);
                 // Remove the kicked connection
                 api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
             },
             FunctionCall::ServerBan(server_id, connection_id, _, _, _, invoker, message, time) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.server_ban(&mut api, server_id, connection_id, invoker, message, time);
                 // Remove the kicked connection
                 api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
@@ -371,16 +380,19 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             },
             FunctionCall::ConnectionChannelGroupChanged(server_id, connection,
                 channel_group_id, channel_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.connection_channel_group_changed(&mut api, server_id,
                     connection, channel_group_id, channel_id, invoker);
             },
             FunctionCall::ConnectionServerGroupAdded(server_id, connection,
                 server_group_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.connection_server_group_added(&mut api, server_id,
                     connection, server_group_id, invoker);
             },
             FunctionCall::ConnectionServerGroupRemoved(server_id, connection,
                 server_group_id, invoker) => {
+                api.try_update_invoker(server_id, &invoker);
                 plugin.connection_server_group_removed(&mut api, server_id,
                     connection, server_group_id, invoker);
             },
@@ -396,6 +408,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                             message, return_code))
                     },
                     ReturningCall::Message(server_id, target_mode, receiver_id, invoker, message, ignored) => {
+                        api.try_update_invoker(server_id, &invoker);
                         let message_receiver = match target_mode {
                             ::TextMessageTargetMode::Client =>
                                 ::MessageReceiver::Connection(::ConnectionId(receiver_id)),
@@ -412,6 +425,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
 
                     },
                     ReturningCall::Poke(server_id, invoker, message, ignored) => {
+                        api.try_update_invoker(server_id, &invoker);
                         ReturnValue(plugin.poke(&api, server_id, invoker, message, ignored))
                     },
                 }).unwrap();

@@ -113,7 +113,7 @@ impl<'a> Property<'a> {
             match self.type_s {
                 "Duration" => {
                     // Try to get an u64
-                    let function = if let Some(f) = self.functions.get("u64") {
+                    let function: &str = if let Some(f) = self.functions.get("u64") {
                         f
                     } else if let Some(f) = self.functions.get("i32") {
                         f

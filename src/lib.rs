@@ -253,6 +253,8 @@ impl Server {
         map
     }
 
+    // ********** Private Interface **********
+
     fn add_connection(&mut self, connection_id: ConnectionId) -> Result<(), Error> {
         self.visible_connections.insert(connection_id, try!(Connection::new(self.id, connection_id)));
         Ok(())
@@ -269,6 +271,16 @@ impl Server {
 
     fn remove_channel(&mut self, channel_id: ChannelId) -> Option<Channel> {
         self.channels.remove(&channel_id)
+    }
+
+    // ********** Public Interface **********
+
+    pub fn get_connection_ids(&self) -> Vec<ConnectionId> {
+        self.visible_connections.keys().cloned().collect()
+    }
+
+    pub fn get_channel_ids(&self) -> Vec<ChannelId> {
+        self.channels.keys().cloned().collect()
     }
 
     pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {
@@ -456,27 +468,24 @@ impl Connection {
 /// The api functions provided by TeamSpeak
 static mut ts3functions: Option<Ts3Functions> = None;
 
-impl Default for TsApi {
-    fn default() -> TsApi {
-        TsApi {
-            servers: Map::new(),
-        }
-    }
-}
-
+// Don't provide a default Implementation because we don't want the TsApi
+// to be publicly constructable.
+#[allow(unknown_lints, new_without_default)]
 impl TsApi {
     /// Create a new TsApi instance without loading anything.
     /// This will be called from the `create_plugin!` macro.
     /// This function is not meant for public use.
-    pub fn new() -> TsApi {
-        Self::default()
+    fn new() -> TsApi {
+        TsApi {
+            servers: Map::new(),
+        }
     }
 
     /// Load all currently connected server and there data.
     /// This should normally be executed after `new()`
     /// This will be called from the `create_plugin!` macro.
     /// This function is not meant for public use.
-    pub fn load(&mut self) -> Result<(), Error> {
+    fn load(&mut self) -> Result<(), Error> {
         // Query available connections
         let mut result: *mut u64 = std::ptr::null_mut();
         let res: Error = unsafe { transmute((ts3functions.as_ref()
@@ -549,7 +558,24 @@ impl TsApi {
         self.servers.remove(&server_id).is_some()
     }
 
+    fn try_update_invoker(&mut self, server_id: ServerId, invoker: &Invoker) {
+        if let Some(server) = self.get_mut_server(server_id) {
+            if let Some(mut connection) = server.get_mut_connection(invoker.get_id()) {
+                if connection.get_uid() != invoker.get_uid() {
+                    connection.uid = invoker.get_uid().clone();
+                }
+                if connection.get_name() != invoker.get_name() {
+                    connection.name = invoker.get_name().clone();
+                }
+            }
+        }
+    }
+
     // ********** Public Interface **********
+
+    pub fn get_server_ids(&self) -> Vec<ServerId> {
+        self.servers.keys().cloned().collect()
+    }
 
     /// Log a message using the TeamSpeak logging API.
     pub fn log_message<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) -> Result<(), Error> {
