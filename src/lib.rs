@@ -104,12 +104,6 @@ pub enum MessageReceiver {
     Server,
 }
 
-pub enum PrintMessageTarget {
-    Server,
-    Channel,
-    CurrentTab,
-}
-
 pub struct Permissions;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -318,20 +312,12 @@ impl Server {
         }
     }
 
-    pub fn print_message<S: AsRef<str>>(&self, message: S, target: PrintMessageTarget) {
+    /// Print a message into the server or channel tab of this server.
+    pub fn print_message<S: AsRef<str>>(&self, message: S, target: MessageTarget) {
         unsafe {
             let text = to_cstring!(message.as_ref());
-            match target {
-                PrintMessageTarget::Server => (ts3functions.as_ref()
-                    .expect("Functions should be loaded").print_message)
-                        (self.id.0, text.as_ptr(), MessageTarget::Server),
-                PrintMessageTarget::Channel => (ts3functions.as_ref()
-                    .expect("Functions should be loaded").print_message)
-                        (self.id.0, text.as_ptr(), MessageTarget::Channel),
-                PrintMessageTarget::CurrentTab => (ts3functions.as_ref()
-                    .expect("Functions should be loaded").print_message_to_current_tab)
-                        (text.as_ptr()),
-            };
+            (ts3functions.as_ref().expect("Functions should be loaded").print_message)
+                    (self.id.0, text.as_ptr(), target);
         }
     }
 }
@@ -656,5 +642,14 @@ impl TsApi {
 
     pub fn get_mut_server(&mut self, server_id: ServerId) -> Option<&mut Server> {
         self.servers.get_mut(&server_id)
+    }
+
+    /// Print a message to the currently selected tab.
+    pub fn print_message<S: AsRef<str>>(&self, message: S) {
+        unsafe {
+            let text = to_cstring!(message.as_ref());
+            (ts3functions.as_ref().expect("Functions should be loaded").print_message_to_current_tab)
+                    (text.as_ptr());
+        }
     }
 }
