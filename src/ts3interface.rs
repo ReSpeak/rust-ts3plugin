@@ -412,8 +412,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                         let message_receiver = match target_mode {
                             ::TextMessageTargetMode::Client =>
                                 ::MessageReceiver::Connection(::ConnectionId(receiver_id)),
-                            ::TextMessageTargetMode::Channel =>
-                                ::MessageReceiver::Channel(::ChannelId(receiver_id as u64)),
+                            ::TextMessageTargetMode::Channel => ::MessageReceiver::Channel,
                             ::TextMessageTargetMode::Server => ::MessageReceiver::Server,
                             _ => {
                                 api.log_or_print("Got invalid TextMessageTargetMode",

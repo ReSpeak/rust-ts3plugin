@@ -100,7 +100,7 @@ pub struct Invoker {
 
 pub enum MessageReceiver {
     Connection(ConnectionId),
-    Channel(ChannelId),
+    Channel,
     Server,
 }
 
