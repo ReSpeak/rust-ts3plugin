@@ -298,6 +298,19 @@ impl Server {
     pub fn get_mut_channel(&mut self, channel_id: ChannelId) -> Option<&mut Channel> {
         self.channels.get_mut(&channel_id)
     }
+
+    pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
+        unsafe {
+            let text = to_cstring!(message.as_ref());
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").request_send_server_text_msg)
+                    (self.id.0, text.as_ptr(), std::ptr::null()));
+            match res {
+                Error::Ok => Ok(()),
+                _ => Err(res)
+            }
+        }
+    }
 }
 
 // ********** Channel **********
@@ -356,6 +369,19 @@ impl Channel {
                     (server_id.0, id.0, &mut number));
             match res {
                 Error::Ok => Ok(ChannelId(number)),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
+        unsafe {
+            let text = to_cstring!(message.as_ref());
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").request_send_channel_text_msg)
+                    (self.server_id.0, text.as_ptr(), self.id.0, std::ptr::null()));
+            match res {
+                Error::Ok => Ok(()),
                 _ => Err(res)
             }
         }
@@ -457,6 +483,19 @@ impl Connection {
                     (server_id.0, id.0, &mut number));
             match res {
                 Error::Ok => Ok(number != 0),
+                _ => Err(res)
+            }
+        }
+    }
+
+    pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
+        unsafe {
+            let text = to_cstring!(message.as_ref());
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").request_send_private_text_msg)
+                    (self.server_id.0, text.as_ptr(), self.id.0, std::ptr::null()));
+            match res {
+                Error::Ok => Ok(()),
                 _ => Err(res)
             }
         }
