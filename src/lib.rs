@@ -104,6 +104,12 @@ pub enum MessageReceiver {
     Server,
 }
 
+pub enum PrintMessageTarget {
+    Server,
+    Channel,
+    CurrentTab,
+}
+
 pub struct Permissions;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -309,6 +315,23 @@ impl Server {
                 Error::Ok => Ok(()),
                 _ => Err(res)
             }
+        }
+    }
+
+    pub fn print_message<S: AsRef<str>>(&self, message: S, target: PrintMessageTarget) {
+        unsafe {
+            let text = to_cstring!(message.as_ref());
+            match target {
+                PrintMessageTarget::Server => (ts3functions.as_ref()
+                    .expect("Functions should be loaded").print_message)
+                        (self.id.0, text.as_ptr(), MessageTarget::Server),
+                PrintMessageTarget::Channel => (ts3functions.as_ref()
+                    .expect("Functions should be loaded").print_message)
+                        (self.id.0, text.as_ptr(), MessageTarget::Channel),
+                PrintMessageTarget::CurrentTab => (ts3functions.as_ref()
+                    .expect("Functions should be loaded").print_message_to_current_tab)
+                        (text.as_ptr()),
+            };
         }
     }
 }
