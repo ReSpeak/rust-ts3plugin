@@ -646,7 +646,8 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
             to_string!(invoker_name)))).unwrap();
 }
 
-#[allow(unknown_lints, too_many_arguments)]
+// Ignore clippy warnings, we can't change the TeamSpeak interface
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -678,8 +679,7 @@ pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(server_id: u64,
     if b { 1 } else { 0 }
 }
 
-// Ignore clippy warnings, we can't change the TeamSpeak interface
-#[allow(unknown_lints, too_many_arguments)]
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -695,7 +695,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(server_id: u64,
         )).unwrap();
 }
 
-#[allow(unknown_lints, too_many_arguments)]
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -711,7 +711,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(server_id: u64,
         )).unwrap();
 }
 
-#[allow(unknown_lints, too_many_arguments)]
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -758,7 +758,7 @@ pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(server_id: u
         to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
 }
 
-#[allow(unknown_lints, too_many_arguments)]
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -773,7 +773,7 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(server_id: u64,
         to_string!(invoker_uid), to_string!(invoker_name)))).unwrap();
 }
 
-#[allow(unknown_lints, too_many_arguments)]
+#[cfg_attr(feature="clippy", allow(too_many_arguments))]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]

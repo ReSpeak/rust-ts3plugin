@@ -2,6 +2,10 @@
 name = "ts3plugin"
 version = "0.1.0"
 authors = ["Flakebi <flakebi@t-online.de>"]
+description = "TeamSpeak3 Plugin API"
+repository = "https://github.com/Flakebi/rust-ts3plugin"
+readme = "README.md"
+license = "MIT"
 build = "src/build.rs"
 
 [lib]

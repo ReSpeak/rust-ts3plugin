@@ -1,4 +1,4 @@
-TS3Plugin API
+TeamSpeak3 Plugin API
 =============
 The documentation can be found [on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
 
@@ -46,6 +46,11 @@ create_plugin!(
     "My Ts Plugin", "0.1.0", "My name", "A wonderful tiny example plugin",
     ConfigureOffer::No, false, MyTsPlugin);
 ```
+
+Projects using this library
+---------------------------
+ - [TeamSpeak3 Text to Speech](https://github.com/Flakebi/ts3tts)
+ - [TsPressor](https://github.com/Splamy/TsPressor)
 
 License
 -------

@@ -518,7 +518,7 @@ static mut ts3functions: Option<Ts3Functions> = None;
 
 // Don't provide a default Implementation because we don't want the TsApi
 // to be publicly constructable.
-#[allow(unknown_lints, new_without_default)]
+#[cfg_attr(feature="clippy", allow(new_without_default))]
 impl TsApi {
     /// Create a new TsApi instance without loading anything.
     /// This will be called from the `create_plugin!` macro.
