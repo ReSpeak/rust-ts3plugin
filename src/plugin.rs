@@ -60,9 +60,13 @@ pub trait Plugin {
     fn connection_changed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, connected: bool, message: String) {}
 
-    fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+    fn connection_move(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, old_channel_id: ::ChannelId,
         new_channel_id: ::ChannelId, visibility: ::Visibility) {}
+
+    fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, old_channel_id: ::ChannelId,
+        new_channel_id: ::ChannelId, visibility: ::Visibility, invoker: ::Invoker) {}
 
     fn connection_timeout(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId) {}

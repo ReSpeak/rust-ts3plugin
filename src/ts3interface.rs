@@ -19,6 +19,7 @@ enum FunctionCall {
     ConnectionInfo(::ServerId, ::ConnectionId),
     ConnectionUpdated(::ServerId, ::ConnectionId, ::Invoker),
     ConnectionMove(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
+    ConnectionMoved(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String, ::Invoker),
     ConnectionSubscribed(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility),
     ConnectionTimeout(::ServerId, ::ConnectionId, ::ChannelId, ::ChannelId, Visibility, String),
     ChannelAnnounced(::ServerId, ::ChannelId, ::ChannelId),
@@ -201,8 +202,66 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                             connection.channel_id = new_channel_id;
                         }
                     }
-                    plugin.connection_moved(&mut api, server_id, connection_id,
+                    plugin.connection_move(&mut api, server_id, connection_id,
                                             old_channel_id, new_channel_id, visibility);
+                    // Remove the connection if it left visibility
+                    if visibility == Visibility::Leave {
+                        api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                    }
+                }
+            },
+            FunctionCall::ConnectionMoved(server_id, connection_id, old_channel_id,
+                    new_channel_id, visibility, move_message, invoker) => {
+                // Appart from the invoker, the same code as for ConnectionMove
+                api.try_update_invoker(server_id, &invoker);
+                if old_channel_id == ::ChannelId(0) {
+                    // Connection connected, this will also be called for ourselves
+                    let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
+                    if let Err(error) = err {
+                        api.log_or_print(format!("Can't get connection information: {:?}",
+                                         error), "rust-ts3plugin", ::LogLevel::Error);
+                    }
+                    plugin.connection_changed(&mut api, server_id, connection_id, true, move_message)
+                } else if new_channel_id == ::ChannelId(0) {
+                    // Connection disconnected
+                    plugin.connection_changed(&mut api, server_id, connection_id, false, move_message);
+                    api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                } else if old_channel_id == new_channel_id {
+                    // Connection announced
+                    match visibility {
+                        Visibility::Enter => {
+                            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
+                            if let Err(error) = err {
+                                api.log_or_print(format!("Can't get connection information: {:?}",
+                                                 error), "rust-ts3plugin", ::LogLevel::Error);
+                            }
+                            plugin.connection_announced(&mut api, server_id, connection_id, true);
+                        },
+                        Visibility::Leave => {
+                            plugin.connection_announced(&mut api, server_id, connection_id, false);
+                            api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                        },
+                        Visibility::Retain => {}
+                    }
+                } else {
+                    // Connection switched channel
+                    // Add the connection if it entered visibility
+                    if visibility == Visibility::Enter {
+                        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
+                        if let Err(error) = err {
+                            api.log_or_print(format!("Can't get connection information: {:?}",
+                                             error), "rust-ts3plugin", ::LogLevel::Error);
+                        }
+                    }
+                    // Update the channel
+                    {
+                        if let Some(connection) = api.get_mut_server(server_id)
+                            .unwrap().get_mut_connection(connection_id) {
+                            connection.channel_id = new_channel_id;
+                        }
+                    }
+                    plugin.connection_moved(&mut api, server_id, connection_id,
+                        old_channel_id, new_channel_id, visibility, invoker);
                     // Remove the connection if it left visibility
                     if visibility == Visibility::Leave {
                         api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
@@ -298,10 +357,10 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             },
             FunctionCall::ChannelDeleted(server_id, channel_id, invoker) => {
                 api.try_update_invoker(server_id, &invoker);
+                plugin.channel_deleted(&mut api, server_id, channel_id, invoker);
                 if api.get_mut_server(server_id).unwrap().remove_channel(channel_id).is_none() {
                     api.log_or_print("Can't remove channel", "rust-ts3plugin", ::LogLevel::Error)
                 }
-                plugin.channel_deleted(&mut api, server_id, channel_id, invoker);
             },
             FunctionCall::ChannelEdited(server_id, channel_id, invoker) => {
                 api.try_update_invoker(server_id, &invoker);
@@ -540,6 +599,19 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
     (*TX.unwrap()).send(FunctionCall::ConnectionMove(::ServerId(server_id),
         ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id),
         transmute(visibility), to_string!(move_message))).unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connection_id: u16,
+    old_channel_id: u64, new_channel_id: u64, visibility: c_int, invoker_id: u16,
+    invoker_name: *const c_char, invoker_uid: *const c_char, move_message: *const c_char) {
+    (*TX.unwrap()).send(FunctionCall::ConnectionMoved(::ServerId(server_id),
+        ::ConnectionId(connection_id), ::ChannelId(old_channel_id), ::ChannelId(new_channel_id),
+        transmute(visibility), to_string!(move_message),
+        ::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid),
+            to_string!(invoker_name)))).unwrap();
 }
 
 #[allow(non_snake_case)]
