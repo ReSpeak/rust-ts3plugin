@@ -1,3 +1,5 @@
+extern crate skeptic;
+
 use std::env;
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
@@ -815,6 +817,7 @@ fn create_connection(f: &mut Write) {
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     println!("cargo:rerun-if-changed={}/src/build.rs", manifest_dir);
+    println!("cargo:rerun-if-changed=README.md/src/build.rs");
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("structs.rs");
@@ -823,6 +826,9 @@ fn main() {
     create_server(&mut f);
     create_channel(&mut f);
     create_connection(&mut f);
+
+    // Create tests for README.md
+    skeptic::generate_doc_tests(&["README.md"]);
 }
 
 fn to_pascal_case<S: AsRef<str>>(text: S) -> String {

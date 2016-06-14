@@ -18,7 +18,7 @@ git = "https://github.com/Flakebi/rust-ts3plugin"
 ```
 
 This code can be used to make your library a TeamSpeak plugin:
-```
+```rust
 #[macro_use]
 extern crate ts3plugin;
 #[macro_use]
@@ -55,3 +55,13 @@ Projects using this library
 License
 -------
 This project is licensed under the MIT license. The full license can be found in the `LICENSE` file.
+
+<div style="display: none;">
+Hidden in normal MarkDown and in GitHub.
+
+```rust,skeptic-template
+{}
+fn main(){{}}
+```
+
+</div>

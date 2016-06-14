@@ -19,8 +19,12 @@ chrono = "*"
 libc = "*"
 
 # For tests
+[build-dependencies]
+skeptic = "0.5"
+
 [dev-dependencies]
 lazy_static = "*"
+skeptic = "0.5"
 
 # Use `cargo build --features "clippy"` to see style lints
 [dependencies.clippy]
