@@ -1,5 +1,7 @@
 TeamSpeak3 Plugin API
-=============
+=====================
+[![Build Status](https://travis-ci.org/Flakebi/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/Flakebi/rust-ts3plugin)
+
 The documentation can be found [on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
 
 Usage
