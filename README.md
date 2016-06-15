@@ -58,12 +58,9 @@ License
 -------
 This project is licensed under the MIT license. The full license can be found in the `LICENSE` file.
 
-<div style="display: none;">
-Hidden in normal MarkDown and in GitHub.
+Template code that is needed to run the rust code in this file as a test:
 
 ```rust,skeptic-template
 {}
 fn main(){{}}
 ```
-
-</div>
