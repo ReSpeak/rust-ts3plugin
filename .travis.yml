@@ -2,3 +2,12 @@ language: rust
 rust:
   - stable
   - nightly
+
+branches:
+  only:
+    - master
+    - develop
+notifications:
+  email: false
+git:
+  depth: 1
