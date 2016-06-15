@@ -4,6 +4,13 @@ TeamSpeak3 Plugin API
 
 The documentation can be found [on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
 
+Even if this library is already used in some projects, it should not be
+considered stable and breaking changes will happen.
+
+At the moment, not all methods that are exposed by the TeamSpeak API are
+available for plugins. If a method that you need is missing please file an issue
+or open a pull request.
+
 Usage
 -----
 Add the following to your `Cargo.toml`:

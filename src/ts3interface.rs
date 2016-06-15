@@ -11,6 +11,13 @@ use ::plugin::Plugin;
 
 static mut TX: Option<*const Sender<FunctionCall>> = None;
 
+macro_rules! error {
+    ($api: ident, $description: expr, $error: expr) => {
+        $api.log_or_print(format!("Error {:?} ({}) in line {} in {}", $error, $description,
+            line!(), file!()), "rust-ts3plugin", ::LogLevel::Error);
+    };
+}
+
 enum FunctionCall {
     ConnectStatusChange(::ServerId, ConnectStatus, Error),
     ServerStop(::ServerId, String),
@@ -67,8 +74,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
     // Create the TsApi
     let mut api = ::TsApi::new();
     if let Err(error) = api.load() {
-        api.log_or_print(format!("Can't create TsApi: {:?}", error),
-            "rust-ts3plugin", ::LogLevel::Error);
+        error!(api, "Can't create TsApi", error);
         main_transmitter.send(Err(::InitError::Failure)).unwrap();
         return;
     }
@@ -93,8 +99,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 // and don't have that server cached already.
                 if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
                     if let Err(error) = api.add_server(server_id) {
-                        api.log_or_print(format!("Can't get server information: {:?}",
-                                         error), "rust-ts3plugin", ::LogLevel::Error)
+                        error!(api, "Can't get server information", error);
                     }
                 }
                 // Execute plugin callback
@@ -148,8 +153,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                             Err(error) => Err(error),
                         }
                     } {
-                    api.log_or_print(format!("Can't get connection information: {:?}", error),
-                                     "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get connection information", error);
                 } else {
                     plugin.connection_updated(&mut api, server_id, connection_id, old_connection, invoker);
                 }
@@ -160,8 +164,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     // Connection connected, this will also be called for ourselves
                     let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                     if let Err(error) = err {
-                        api.log_or_print(format!("Can't get connection information: {:?}",
-                                         error), "rust-ts3plugin", ::LogLevel::Error);
+                        error!(api, "Can't get connection information", error);
                     }
                     plugin.connection_changed(&mut api, server_id, connection_id, true, move_message)
                 } else if new_channel_id == ::ChannelId(0) {
@@ -174,8 +177,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                         Visibility::Enter => {
                             let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                             if let Err(error) = err {
-                                api.log_or_print(format!("Can't get connection information: {:?}",
-                                                 error), "rust-ts3plugin", ::LogLevel::Error);
+                                error!(api, "Can't get connection information", error);
                             }
                             plugin.connection_announced(&mut api, server_id, connection_id, true);
                         },
@@ -191,8 +193,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     if visibility == Visibility::Enter {
                         let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                         if let Err(error) = err {
-                            api.log_or_print(format!("Can't get connection information: {:?}",
-                                             error), "rust-ts3plugin", ::LogLevel::Error);
+                            error!(api, "Can't get connection information", error);
                         }
                     }
                     // Update the channel
@@ -218,8 +219,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     // Connection connected, this will also be called for ourselves
                     let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                     if let Err(error) = err {
-                        api.log_or_print(format!("Can't get connection information: {:?}",
-                                         error), "rust-ts3plugin", ::LogLevel::Error);
+                        error!(api, "Can't get connection information", error);
                     }
                     plugin.connection_changed(&mut api, server_id, connection_id, true, move_message)
                 } else if new_channel_id == ::ChannelId(0) {
@@ -232,8 +232,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                         Visibility::Enter => {
                             let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                             if let Err(error) = err {
-                                api.log_or_print(format!("Can't get connection information: {:?}",
-                                                 error), "rust-ts3plugin", ::LogLevel::Error);
+                                error!(api, "Can't get connection information", error);
                             }
                             plugin.connection_announced(&mut api, server_id, connection_id, true);
                         },
@@ -249,8 +248,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     if visibility == Visibility::Enter {
                         let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                         if let Err(error) = err {
-                            api.log_or_print(format!("Can't get connection information: {:?}",
-                                             error), "rust-ts3plugin", ::LogLevel::Error);
+                            error!(api, "Can't get connection information", error);
                         }
                     }
                     // Update the channel
@@ -274,8 +272,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     Visibility::Enter => {
                         let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
                         if let Err(error) = err {
-                            api.log_or_print(format!("Can't get connection information: {:?}",
-                                                     error), "rust-ts3plugin", ::LogLevel::Error);
+                            error!(api, "Can't get connection information", error);
                         }
                         plugin.connection_announced(&mut api, server_id, connection_id, true);
                     },
@@ -293,8 +290,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             FunctionCall::ChannelAnnounced(server_id, channel_id, _) => {
                 let err = api.get_mut_server(server_id).unwrap().add_channel(channel_id).err();
                 if let Some(error) = err {
-                    api.log_or_print(format!("Can't get channel information: {:?}",
-                                     error), "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get channel information", error);
                 }
                 plugin.channel_announced(&mut api, server_id, channel_id);
             }
@@ -317,8 +313,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     } else {
                         Ok(())
                     } {
-                    api.log_or_print(format!("Can't get channel description: {:?}", error),
-                                     "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get channel description", error);
                 }
                 plugin.channel_description_updated(&mut api, server_id, channel_id);
             },
@@ -340,8 +335,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                             Err(error) => Err(error),
                         }
                     } {
-                    api.log_or_print(format!("Can't get channel information: {:?}", error),
-                                     "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get channel information", error);
                 } else {
                     plugin.channel_updated(&mut api, server_id, channel_id, old_channel);
                 }
@@ -350,8 +344,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 api.try_update_invoker(server_id, &invoker);
                 if let Err(error) = api.get_mut_server(server_id).unwrap()
                     .add_channel(channel_id) {
-                    api.log_or_print(format!("Can't get channel information: {:?}", error),
-                                     "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get channel information", error);
                 }
                 plugin.channel_created(&mut api, server_id, channel_id, invoker);
             },
@@ -381,8 +374,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                             Err(error) => Err(error),
                         }
                     } {
-                    api.log_or_print(format!("Can't get channel information: {:?}", error),
-                                     "rust-ts3plugin", ::LogLevel::Error)
+                    error!(api, "Can't get channel information", error);
                 } else {
                     plugin.channel_edited(&mut api, server_id, channel_id, old_channel,
                                           invoker);
