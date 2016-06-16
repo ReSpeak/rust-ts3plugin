@@ -817,7 +817,7 @@ fn create_connection(f: &mut Write) {
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     println!("cargo:rerun-if-changed={}/src/build.rs", manifest_dir);
-    println!("cargo:rerun-if-changed=README.md/src/build.rs");
+    println!("cargo:rerun-if-changed={}/README.md", manifest_dir);
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("structs.rs");
