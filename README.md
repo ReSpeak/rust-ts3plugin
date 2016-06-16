@@ -63,7 +63,13 @@ Projects using this library
 
 License
 -------
-This project is licensed under the MIT license. The full license can be found in the `LICENSE` file.
+Licensed under either of
+
+ * [Apache License, Version 2.0](LICENSE-APACHE)
+ * [MIT license](LICENSE-MIT)
+
+at your option.
+
 
 Template code that is needed to run the rust code in this file as a test:
 
