@@ -11,10 +11,19 @@ use ::plugin::Plugin;
 
 static mut TX: Option<*const Sender<FunctionCall>> = None;
 
+/// Get the current file without the preceding path
+macro_rules! filename {
+    () => {{
+        let f = file!();
+        &f[f.rfind(|c| c == '/' || c == '\\').map_or(0, |i| i + 1)..]
+    }};
+}
+
+/// Log an error with a description and the current line and file
 macro_rules! error {
     ($api: ident, $description: expr, $error: expr) => {
-        $api.log_or_print(format!("Error {:?} ({}) in line {} in {}", $error, $description,
-            line!(), file!()), "rust-ts3plugin", ::LogLevel::Error);
+        $api.log_or_print(format!("Error {:?} ({}) in in {}:L{}", $error, $description,
+            filename!(), line!()), "rust-ts3plugin", ::LogLevel::Error);
     };
 }
 
@@ -199,7 +208,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     // Update the channel
                     {
                         if let Some(connection) = api.get_mut_server(server_id)
-                            .unwrap().get_mut_connection(connection_id) {
+                            .and_then(|s| s.get_mut_connection(connection_id)) {
                             connection.channel_id = new_channel_id;
                         }
                     }
@@ -254,7 +263,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                     // Update the channel
                     {
                         if let Some(connection) = api.get_mut_server(server_id)
-                            .unwrap().get_mut_connection(connection_id) {
+                            .and_then(|s| s.get_mut_connection(connection_id)) {
                             connection.channel_id = new_channel_id;
                         }
                     }
@@ -262,7 +271,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                         old_channel_id, new_channel_id, visibility, invoker);
                     // Remove the connection if it left visibility
                     if visibility == Visibility::Leave {
-                        api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                        api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
                     }
                 }
             },
@@ -351,7 +360,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             FunctionCall::ChannelDeleted(server_id, channel_id, invoker) => {
                 api.try_update_invoker(server_id, &invoker);
                 plugin.channel_deleted(&mut api, server_id, channel_id, invoker);
-                if api.get_mut_server(server_id).unwrap().remove_channel(channel_id).is_none() {
+                if api.get_mut_server(server_id).and_then(|s| s.remove_channel(channel_id)).is_none() {
                     api.log_or_print("Can't remove channel", "rust-ts3plugin", ::LogLevel::Error)
                 }
             },
@@ -386,7 +395,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
             FunctionCall::ChannelMove(server_id, channel_id, new_parent_channel_id, invoker) => {
                 api.try_update_invoker(server_id, &invoker);
                 plugin.channel_moved(&mut api, server_id, channel_id, new_parent_channel_id, invoker);
-                if let Some(channel) = api.get_mut_server(server_id).unwrap().get_mut_channel(channel_id) {
+                if let Some(channel) = api.get_mut_server(server_id).and_then(|s| s.get_mut_channel(channel_id)) {
                     channel.parent_channel_id = new_parent_channel_id;
                 }
             },
@@ -397,11 +406,11 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                                     new_channel_id, visibility, invoker, message);
                 // Remove the kicked connection if it is not visible anymore
                 if visibility == ::Visibility::Leave {
-                    api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                    api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
                 } else {
                     // Update the current channel of the connection
-                    if let Some(connection) = api.get_mut_server(server_id).unwrap()
-                        .get_mut_connection(connection_id) {
+                    if let Some(connection) = api.get_mut_server(server_id).and_then(|s|
+                        s.get_mut_connection(connection_id)) {
                         connection.channel_id = new_channel_id;
                     }
                 }
@@ -410,18 +419,18 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 api.try_update_invoker(server_id, &invoker);
                 plugin.server_kick(&mut api, server_id, connection_id, invoker, message);
                 // Remove the kicked connection
-                api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
             },
             FunctionCall::ServerBan(server_id, connection_id, _, _, _, invoker, message, time) => {
                 api.try_update_invoker(server_id, &invoker);
                 plugin.server_ban(&mut api, server_id, connection_id, invoker, message, time);
                 // Remove the kicked connection
-                api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
+                api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
             },
             FunctionCall::TalkStatusChanged(server_id, connection_id, talking, whispering) => {
                 plugin.talking_changed(&mut api, server_id, connection_id, talking, whispering);
                 // Update the connection
-                if let Some(connection) = api.get_mut_server(server_id).unwrap().get_mut_connection(connection_id) {
+                if let Some(connection) = api.get_mut_server(server_id).and_then(|s| s.get_mut_connection(connection_id)) {
                     connection.talking = talking;
                     connection.whispering = whispering;
                 }
