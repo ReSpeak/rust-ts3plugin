@@ -407,12 +407,10 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                 // Remove the kicked connection if it is not visible anymore
                 if visibility == ::Visibility::Leave {
                     api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
-                } else {
+                } else if let Some(connection) = api.get_mut_server(server_id).and_then(|s|
                     // Update the current channel of the connection
-                    if let Some(connection) = api.get_mut_server(server_id).and_then(|s|
-                        s.get_mut_connection(connection_id)) {
-                        connection.channel_id = new_channel_id;
-                    }
+                    s.get_mut_connection(connection_id)) {
+                    connection.channel_id = new_channel_id;
                 }
             },
             FunctionCall::ServerKick(server_id, connection_id, _, _, _, invoker, message) => {

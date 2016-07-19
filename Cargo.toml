@@ -2,9 +2,13 @@
 name = "ts3plugin"
 version = "0.1.0"
 authors = ["Flakebi <flakebi@t-online.de>"]
-description = "TeamSpeak3 Plugin API"
+description = """
+An abstraction layer that simlifies creating TeamSpeak3 plugins
+and stores received data to provide a more convenient API.
+"""
 repository = "https://github.com/Flakebi/rust-ts3plugin"
 readme = "README.md"
+keywords = ["TeamSpeak3", "plugin"]
 license = "MIT/Apache-2.0"
 build = "src/build.rs"
 
