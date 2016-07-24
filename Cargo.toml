@@ -8,7 +8,7 @@ and stores received data to provide a more convenient API.
 """
 repository = "https://github.com/Flakebi/rust-ts3plugin"
 readme = "README.md"
-keywords = ["TeamSpeak3", "plugin"]
+keywords = ["plugin", "TeamSpeak3"]
 license = "MIT/Apache-2.0"
 build = "src/build.rs"
 
@@ -19,21 +19,19 @@ name = "ts3plugin"
 default = []
 
 [dependencies]
-chrono = "*"
-libc = "*"
+chrono = "0.2"
+libc = "0.2"
+ts3plugin-sys = "0.1"
 
 # For tests
 [build-dependencies]
 skeptic = "0.5"
 
 [dev-dependencies]
-lazy_static = "*"
+lazy_static = "0.2"
 skeptic = "0.5"
 
 # Use `cargo build --features "clippy"` to see style lints
 [dependencies.clippy]
 version = "*"
 optional = true
-
-[dependencies.ts3plugin_sys]
-git = "https://github.com/Flakebi/rust-ts3plugin-sys"
