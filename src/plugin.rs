@@ -64,6 +64,7 @@ pub trait Plugin {
         connection_id: ::ConnectionId, old_channel_id: ::ChannelId,
         new_channel_id: ::ChannelId, visibility: ::Visibility) {}
 
+    #[cfg_attr(feature="clippy", allow(too_many_arguments))]
     fn connection_moved(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, old_channel_id: ::ChannelId,
         new_channel_id: ::ChannelId, visibility: ::Visibility, invoker: ::Invoker) {}
@@ -112,6 +113,7 @@ pub trait Plugin {
     fn poke(&mut self, api: &::TsApi, server_id: ::ServerId, invoker: ::Invoker,
         message: String, ignored: bool) -> bool { false }
 
+    #[cfg_attr(feature="clippy", allow(too_many_arguments))]
     fn channel_kick(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, old_channel_id: ::ChannelId, new_channel_id: ::ChannelId,
         visibility: ::Visibility, invoker: ::Invoker, message: String) {}
@@ -139,6 +141,30 @@ pub trait Plugin {
 
     fn connection_server_group_removed(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection: ::Invoker, server_group_id: ::ServerGroupId, invoker: ::Invoker) {}
+
+    /// The voice data is available as 16 bit with 48 KHz. The channels are packed
+    /// (interleaved).
+    fn playback_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, samples: &mut [i16], channels: u32) {}
+
+    #[cfg_attr(feature="clippy", allow(too_many_arguments))]
+    fn post_process_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, samples: &mut [i16], channels: u32,
+        channel_speaker_array: &[::Speaker], channel_fill_mask: &mut u32) {}
+
+    #[cfg_attr(feature="clippy", allow(too_many_arguments))]
+    fn mixed_playback_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
+        samples: &mut [i16], channels: u32, channel_speaker_array: &[::Speaker],
+        channel_fill_mask: &mut u32) {}
+
+    /// The recorded sound from the current capture device.
+    /// `send` is set if the audio data will be send to the server. This attribute
+    /// can be changed in this callback.
+    /// The return value of this function describes if the sound data was altered.
+    /// Return `true` if the sound was changed and `false` otherwise.
+    #[cfg_attr(feature="clippy", allow(too_many_arguments))]
+    fn captured_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
+        samples: &mut [i16], channels: u32, send: &mut bool) -> bool { false }
 
     /// Return `false` if the TeamSpeak client should handle the error normally or
     /// `true` if the client should ignore the error.

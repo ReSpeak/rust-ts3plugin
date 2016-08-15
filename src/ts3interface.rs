@@ -1,6 +1,7 @@
-use libc::{c_char, c_int, c_uint};
+use libc::{c_char, c_int, c_short, c_uint};
 use std::ffi::CStr;
 use std::mem::transmute;
+use std::slice;
 use std::sync::mpsc::{channel, Sender};
 
 use ts3plugin_sys::clientlib_publicdefinitions::*;
@@ -69,6 +70,10 @@ enum ReturningCall {
     PermissionError(::ServerId, ::PermissionId, ::Error, String, String),
     Message(::ServerId, ::TextMessageTargetMode, u16, ::Invoker, String, bool),
     Poke(::ServerId, ::Invoker, String, bool),
+    PlaybackVoiceData(::ServerId, ::ConnectionId, *mut i16, usize, u32),
+    PostProcessVoiceData(::ServerId, ::ConnectionId, *mut i16, usize, u32, *const c_uint, *mut c_uint),
+    MixedPlaybackVoiceData(::ServerId, *mut i16, usize, u32, *const c_uint, *mut c_uint),
+    CapturedVoiceData(::ServerId, *mut i16, usize, u32, *mut c_int),
 }
 
 /// The manager thread calls plugin functions on events.
@@ -485,6 +490,55 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                         api.try_update_invoker(server_id, &invoker);
                         ReturnValue(plugin.poke(&api, server_id, invoker, message, ignored))
                     },
+                    ReturningCall::PlaybackVoiceData(server_id, connection_id,
+                        samples, sample_count, channels) => {
+                        let mut samples = unsafe { slice::from_raw_parts_mut(samples, sample_count * channels as usize) };
+                        plugin.playback_voice_data(&api, server_id, connection_id, samples, channels);
+                        // The plugin is ready with editing the voice data so we can return now
+                        ReturnValue(true)
+                    },
+                    ReturningCall::PostProcessVoiceData(server_id, connection_id,
+                        samples, sample_count, channels, channel_speaker_array,
+                        channel_fill_mask) => {
+                        let mut samples = unsafe { slice::from_raw_parts_mut(samples,
+                            sample_count * channels as usize) };
+                        let channel_speaker_array = unsafe {
+                            slice::from_raw_parts(channel_speaker_array as *mut ::Speaker,
+                                channels as usize) };
+                        plugin.post_process_voice_data(&api, server_id, connection_id,
+                            samples, channels, channel_speaker_array,
+                            unsafe { &mut *channel_fill_mask });
+                        // The plugin is ready with editing the voice data so we can return now
+                        ReturnValue(true)
+                    },
+                    ReturningCall::MixedPlaybackVoiceData(server_id, samples,
+                        sample_count, channels, channel_speaker_array,
+                        channel_fill_mask) => {
+                        let mut samples = unsafe { slice::from_raw_parts_mut(samples,
+                            sample_count * channels as usize) };
+                        let channel_speaker_array = unsafe {
+                            slice::from_raw_parts(channel_speaker_array as *mut ::Speaker,
+                                channels as usize) };
+                        plugin.mixed_playback_voice_data(&api, server_id,
+                            samples, channels, channel_speaker_array,
+                            unsafe { &mut *channel_fill_mask });
+                        // The plugin is ready with editing the voice data so we can return now
+                        ReturnValue(true)
+                    },
+                    ReturningCall::CapturedVoiceData(server_id, samples,
+                        sample_count, channels, edited) => {
+                        let mut samples = unsafe { slice::from_raw_parts_mut(samples,
+                            sample_count * channels as usize) };
+                        let mut send = unsafe { *edited } & 2 != 0;
+                        unsafe {
+                            *edited |= plugin.captured_voice_data(&api, server_id,
+                                samples, channels, &mut send) as c_int;
+                            // Set the second bit of `edited` to `send`
+                            *edited = (*edited & !2) | ((send as c_int) << 1);
+                        }
+                        // The plugin is ready with editing the voice data so we can return now
+                        ReturnValue(true)
+                    },
                 }).unwrap();
             },
             FunctionCall::Quit => {
@@ -872,4 +926,59 @@ pub unsafe extern "C" fn ts3plugin_onServerPermissionErrorEvent(server_id: u64,
         to_string!(return_code)))).unwrap();
     let ReturnValue(b) = receiver.recv().unwrap();
     if b { 1 } else { 0 }
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onEditPlaybackVoiceDataEvent(server_id: u64,
+    connection_id: u16, samples: *mut c_short, sample_count: c_int, channels: c_int) {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::PlaybackVoiceData(::ServerId(server_id),
+        ::ConnectionId(connection_id),
+        samples, sample_count as usize,
+        channels as u32))).unwrap();
+    receiver.recv().unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onEditPostProcessVoiceDataEvent(server_id: u64,
+    connection_id: u16, samples: *mut c_short, sample_count: c_int, channels: c_int,
+    channel_speaker_array: *const c_uint, channel_fill_mask: *mut c_uint) {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::PostProcessVoiceData(::ServerId(server_id),
+        ::ConnectionId(connection_id),
+        samples, sample_count as usize, channels as u32, channel_speaker_array,
+        channel_fill_mask))).unwrap();
+    receiver.recv().unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onEditMixedPlaybackVoiceDataEvent(server_id: u64,
+    samples: *mut c_short, sample_count: c_int, channels: c_int,
+    channel_speaker_array: *const c_uint, channel_fill_mask: *mut c_uint) {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::MixedPlaybackVoiceData(::ServerId(server_id),
+        samples, sample_count as usize, channels as u32, channel_speaker_array,
+        channel_fill_mask))).unwrap();
+    receiver.recv().unwrap();
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_onEditCapturedVoiceDataEvent(server_id: u64,
+    samples: *mut c_short, sample_count: c_int, channels: c_int, edited: *mut c_int) {
+    let (sender, receiver) = channel();
+    (*TX.unwrap()).send(FunctionCall::ReturningCall(sender,
+        ReturningCall::CapturedVoiceData(::ServerId(server_id),
+        samples, sample_count as usize, channels as u32, edited))).unwrap();
+    receiver.recv().unwrap();
 }
