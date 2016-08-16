@@ -21,8 +21,8 @@ pub enum InitError {
 #[allow(unused_variables)]
 pub trait Plugin {
     // ************************** Required functions ***************************
-    // Custom code called right after loading the plugin.
-    fn new(&api: &::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
+    /// Called when the plugin is loaded by TeamSpeak.
+    fn new(api: &mut ::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
 
     /// If the connection status changes.
     /// If `status = ConnectStatus::Connecting`, the connection_id is not yet
@@ -34,7 +34,7 @@ pub trait Plugin {
 
     /// Return `false` if the TeamSpeak client should handle the error normally or
     /// `true` if the client should ignore the error.
-    fn server_error(&mut self, api: &::TsApi, server_id: ::ServerId,
+    fn server_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         error: ::Error, message: String, return_code: String,
         extra_message: String) -> bool { false }
 
@@ -103,14 +103,14 @@ pub trait Plugin {
     /// of TeamSpeak ignored the message.
     /// Return `false` if the TeamSpeak client should handle the message normally or
     /// `true` if the client should ignore the message.
-    fn message(&mut self, api: &::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+    fn message(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
         target: ::MessageReceiver, message: String, ignored: bool) -> bool { false }
 
     /// A user poked us. `ignored` describes, if the friend and fool system
     /// of TeamSpeak ignored the message.
     /// Return `false` if the TeamSpeak client should handle the poke normally or
     /// `true` if the client should ignore the poke.
-    fn poke(&mut self, api: &::TsApi, server_id: ::ServerId, invoker: ::Invoker,
+    fn poke(&mut self, api: &mut ::TsApi, server_id: ::ServerId, invoker: ::Invoker,
         message: String, ignored: bool) -> bool { false }
 
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
@@ -144,17 +144,17 @@ pub trait Plugin {
 
     /// The voice data is available as 16 bit with 48 KHz. The channels are packed
     /// (interleaved).
-    fn playback_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
-        connection_id: ::ConnectionId, samples: &mut [i16], channels: u32) {}
+    fn playback_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, samples: &mut [i16], channels: i32) {}
 
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
-    fn post_process_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
-        connection_id: ::ConnectionId, samples: &mut [i16], channels: u32,
+    fn post_process_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        connection_id: ::ConnectionId, samples: &mut [i16], channels: i32,
         channel_speaker_array: &[::Speaker], channel_fill_mask: &mut u32) {}
 
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
-    fn mixed_playback_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
-        samples: &mut [i16], channels: u32, channel_speaker_array: &[::Speaker],
+    fn mixed_playback_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        samples: &mut [i16], channels: i32, channel_speaker_array: &[::Speaker],
         channel_fill_mask: &mut u32) {}
 
     /// The recorded sound from the current capture device.
@@ -163,18 +163,18 @@ pub trait Plugin {
     /// The return value of this function describes if the sound data was altered.
     /// Return `true` if the sound was changed and `false` otherwise.
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
-    fn captured_voice_data(&mut self, api: &::TsApi, server_id: ::ServerId,
-        samples: &mut [i16], channels: u32, send: &mut bool) -> bool { false }
+    fn captured_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+        samples: &mut [i16], channels: i32, send: &mut bool) -> bool { false }
 
     /// Return `false` if the TeamSpeak client should handle the error normally or
     /// `true` if the client should ignore the error.
-    fn permission_error(&mut self, api: &::TsApi, server_id: ::ServerId,
+    fn permission_error(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         permission_id: ::PermissionId, error: ::Error, message: String,
         return_code: String) -> bool { false }
 
     /// Called if the plugin is disabled (either by the user or if TeamSpeak is
     /// exiting).
-    fn shutdown(&mut self, api: &::TsApi) {}
+    fn shutdown(&mut self, api: &mut ::TsApi) {}
 }
 
 /// Create a plugin. This macro has to be called once per library to create the
@@ -214,10 +214,7 @@ macro_rules! create_plugin {
         #[no_mangle]
         #[doc(hidden)]
         pub extern "C" fn ts3plugin_init() -> c_int {
-            let (sender, receiver) = std::sync::mpsc::channel();
-            std::thread::spawn(move ||
-                $crate::ts3interface::manager_thread::<$typename>(sender));
-            match receiver.recv().unwrap() {
+            match $crate::ts3interface::private_init::<$typename>() {
                 Ok(_) => 0,
                 Err($crate::InitError::Failure) => 1,
                 Err($crate::InitError::FailureNoMessage) => -2,

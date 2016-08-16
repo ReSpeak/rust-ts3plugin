@@ -15,7 +15,7 @@
 //! struct MyTsPlugin;
 //!
 //! impl Plugin for MyTsPlugin {
-//!     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+//!     fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
 //!         Ok(Box::new(MyTsPlugin))
 //!         // Or return Err(InitError::Failure) on failure
@@ -23,7 +23,7 @@
 //!
 //!     // Implement callbacks here
 //!
-//!     fn shutdown(&mut self, api: &TsApi) {
+//!     fn shutdown(&mut self, api: &mut TsApi) {
 //!         api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
 //!     }
 //! }

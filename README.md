@@ -27,7 +27,7 @@ git = "https://github.com/Flakebi/rust-ts3plugin"
 ```
 
 This code can be used to make your library a TeamSpeak plugin:
-```rust
+```rust,no-run
 #[macro_use]
 extern crate ts3plugin;
 #[macro_use]
@@ -38,7 +38,7 @@ use ts3plugin::*;
 struct MyTsPlugin;
 
 impl Plugin for MyTsPlugin {
-    fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+    fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
         Ok(Box::new(MyTsPlugin))
         // Or return Err(InitError::Failure) on failure
@@ -46,7 +46,7 @@ impl Plugin for MyTsPlugin {
 
     // Implement callbacks here
 
-    fn shutdown(&mut self, api: &TsApi) {
+    fn shutdown(&mut self, api: &mut TsApi) {
         api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
     }
 }

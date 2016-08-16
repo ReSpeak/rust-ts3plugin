@@ -25,11 +25,11 @@ ts3plugin-sys = "0.2"
 
 # For tests
 [build-dependencies]
-skeptic = "0.5"
+skeptic = "0.6"
 
 [dev-dependencies]
 lazy_static = "0.2"
-skeptic = "0.5"
+skeptic = "0.6"
 
 # Use `cargo build --features "clippy"` to see style lints
 [dependencies.clippy]
