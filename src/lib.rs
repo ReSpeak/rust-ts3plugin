@@ -84,6 +84,7 @@ type Map<K, V> = BTreeMap<K, V>;
 include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 
 // ******************** Structs ********************
+/// The main struct that contains all permanently save data.
 pub struct TsApi {
     servers: Map<ServerId, Server>,
 }
@@ -98,20 +99,26 @@ pub struct Invoker {
     name: String,
 }
 
+/// The possible receivers of a message. A message can be sent to a specific
+/// connection, to the current channel chat or to the server chat.
 pub enum MessageReceiver {
     Connection(ConnectionId),
     Channel,
     Server,
 }
 
+/// Permissions - TODO not yet implemented
 pub struct Permissions;
 
+/// A wrapper for a server id.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ServerId(u64);
 
+/// A wrapper for a channel id.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ChannelId(u64);
 
+/// A wrapper for a connection id.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ConnectionId(u16);
 
@@ -143,14 +150,17 @@ impl Invoker {
         }
     }
 
+    /// Get the connection id of this invoker.
     pub fn get_id(&self) -> ConnectionId {
         self.id
     }
 
+    /// Get the unique id of this invoker.
     pub fn get_uid(&self) -> &String {
         &self.uid
     }
 
+    /// Get the name of this invoker.
     pub fn get_name(&self) -> &String {
         &self.name
     }
@@ -165,6 +175,7 @@ impl PartialEq<Server> for Server {
 impl Eq for Server {}
 
 impl Server {
+    /// Get a server property that is stored as a string.
     fn get_property_as_string(id: ServerId, property: VirtualServerProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
@@ -178,6 +189,7 @@ impl Server {
         }
     }
 
+    /// Get a server property that is stored as an int.
     fn get_property_as_int(id: ServerId, property: VirtualServerProperties) -> Result<i32, Error> {
         unsafe {
             let mut number: c_int = 0;
@@ -191,6 +203,7 @@ impl Server {
         }
     }
 
+    /// Get the connection id of our own client.
     /// Called when a new Server is created.
     fn query_own_connection_id(id: ServerId) -> Result<ConnectionId, Error> {
         unsafe {
@@ -205,6 +218,7 @@ impl Server {
         }
     }
 
+    /// Get all currently active connections on this server.
     /// Called when a new Server is created.
     /// When an error occurs, users are not inserted into the map.
     fn query_connections(id: ServerId) -> Map<ConnectionId, Connection> {
@@ -229,6 +243,7 @@ impl Server {
         map
     }
 
+    /// Get all channels on this server.
     /// Called when a new Server is created.
     /// When an error occurs, channels are not inserted into the map.
     fn query_channels(id: ServerId) -> Map<ChannelId, Channel> {
@@ -275,30 +290,41 @@ impl Server {
 
     // ********** Public Interface **********
 
+    /// Get the ids of all visible connections on this server.
     pub fn get_connection_ids(&self) -> Vec<ConnectionId> {
         self.visible_connections.keys().cloned().collect()
     }
 
+    /// Get the ids of all channels on this server.
     pub fn get_channel_ids(&self) -> Vec<ChannelId> {
         self.channels.keys().cloned().collect()
     }
 
+    /// Get the connection on this server that has the specified id, returns
+    /// `None` if there is no such connection.
     pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {
         self.visible_connections.get(&connection_id)
     }
 
+    /// Get the mutable connection on this server that has the specified id, returns
+    /// `None` if there is no such connection.
     pub fn get_mut_connection(&mut self, connection_id: ConnectionId) -> Option<&mut Connection> {
         self.visible_connections.get_mut(&connection_id)
     }
 
+    /// Get the channel on this server that has the specified id, returns
+    /// `None` if there is no such channel.
     pub fn get_channel(&self, channel_id: ChannelId) -> Option<&Channel> {
         self.channels.get(&channel_id)
     }
 
+    /// Get the mutable channel on this server that has the specified id, returns
+    /// `None` if there is no such channel.
     pub fn get_mut_channel(&mut self, channel_id: ChannelId) -> Option<&mut Channel> {
         self.channels.get_mut(&channel_id)
     }
 
+    /// Send a message to the server chat.
     pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
         unsafe {
             let text = to_cstring!(message.as_ref());
@@ -312,7 +338,8 @@ impl Server {
         }
     }
 
-    /// Print a message into the server or channel tab of this server.
+    /// Print a message into the server or channel tab of this server. This is only
+    /// visible in the window of this client and will not be sent to the server.
     pub fn print_message<S: AsRef<str>>(&self, message: S, target: MessageTarget) {
         unsafe {
             let text = to_cstring!(message.as_ref());
@@ -331,6 +358,7 @@ impl PartialEq<Channel> for Channel {
 impl Eq for Channel {}
 
 impl Channel {
+    /// Get a channel property that is stored as a string.
     fn get_property_as_string(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
@@ -344,6 +372,7 @@ impl Channel {
         }
     }
 
+    /// Get a channel property that is stored as an int.
     fn get_property_as_int(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
         unsafe {
             let mut number: c_int = 0;
@@ -357,6 +386,7 @@ impl Channel {
         }
     }
 
+    /// Get a channel property that is stored as an uint64.
     fn get_property_as_uint64(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -370,6 +400,7 @@ impl Channel {
         }
     }
 
+    /// Get the parent channel id of a channel.
     fn query_parent_channel_id(server_id: ServerId, id: ChannelId) -> Result<ChannelId, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -383,6 +414,7 @@ impl Channel {
         }
     }
 
+    /// Send a message to this channel chat.
     pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
         unsafe {
             let text = to_cstring!(message.as_ref());
@@ -406,6 +438,7 @@ impl PartialEq<Connection> for Connection {
 impl Eq for Connection {}
 
 impl Connection {
+    /// Get a connection property that is stored as a string.
     fn get_connection_property_as_string(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
@@ -419,6 +452,7 @@ impl Connection {
         }
     }
 
+    /// Get a connection property that is stored as a uint64.
     fn get_connection_property_as_uint64(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<u64, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -432,6 +466,7 @@ impl Connection {
         }
     }
 
+    /// Get a connection property that is stored as a double.
     fn get_connection_property_as_double(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<f64, Error> {
         unsafe {
             let mut number: f64 = 0.0;
@@ -445,6 +480,7 @@ impl Connection {
         }
     }
 
+    /// Get a client property that is stored as a string.
     fn get_client_property_as_string(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<String, Error> {
         unsafe {
             let mut name: *mut c_char = std::ptr::null_mut();
@@ -458,6 +494,7 @@ impl Connection {
         }
     }
 
+    /// Get a client property that is stored as an int.
     fn get_client_property_as_int(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<c_int, Error> {
         unsafe {
             let mut number: c_int = 0;
@@ -471,6 +508,7 @@ impl Connection {
         }
     }
 
+    /// Get the current channel id of a connection.
     fn query_channel_id(server_id: ServerId, id: ConnectionId) -> Result<ChannelId, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -484,6 +522,7 @@ impl Connection {
         }
     }
 
+    /// Returns true if the connection is currently whispering to us.
     fn query_whispering(server_id: ServerId, id: ConnectionId) -> Result<bool, Error> {
         unsafe {
             let mut number: c_int = 0;
@@ -497,6 +536,7 @@ impl Connection {
         }
     }
 
+    /// Send a message to this connection.
     pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
         unsafe {
             let text = to_cstring!(message.as_ref());
@@ -529,10 +569,8 @@ impl TsApi {
         }
     }
 
-    /// Load all currently connected server and there data.
+    /// Load all currently connected server and their data.
     /// This should normally be executed after `new()`
-    /// This will be called from the `create_plugin!` macro.
-    /// This function is not meant for public use.
     fn load(&mut self) -> Result<(), Error> {
         // Query available connections
         let mut result: *mut u64 = std::ptr::null_mut();
@@ -606,6 +644,8 @@ impl TsApi {
         self.servers.remove(&server_id).is_some()
     }
 
+    /// Update the data of a connection with the data from the same connection
+    /// as an invoker if possible.
     fn try_update_invoker(&mut self, server_id: ServerId, invoker: &Invoker) {
         if let Some(server) = self.get_mut_server(server_id) {
             if let Some(mut connection) = server.get_mut_connection(invoker.get_id()) {
@@ -621,6 +661,7 @@ impl TsApi {
 
     // ********** Public Interface **********
 
+    /// Get all server ids to which this client is currently connected.
     pub fn get_server_ids(&self) -> Vec<ServerId> {
         self.servers.keys().cloned().collect()
     }
@@ -636,15 +677,20 @@ impl TsApi {
         TsApi::static_log_or_print(message, channel, severity)
     }
 
+    /// Get the server that has the specified id, returns `None` if there is no
+    /// such server.
     pub fn get_server(&self, server_id: ServerId) -> Option<&Server> {
         self.servers.get(&server_id)
     }
 
+    /// Get the mutable server that has the specified id, returns `None` if there is no
+    /// such server.
     pub fn get_mut_server(&mut self, server_id: ServerId) -> Option<&mut Server> {
         self.servers.get_mut(&server_id)
     }
 
-    /// Print a message to the currently selected tab.
+    /// Print a message to the currently selected tab. This is only
+    /// visible in the window of this client and will not be sent to the server.
     pub fn print_message<S: AsRef<str>>(&self, message: S) {
         unsafe {
             let text = to_cstring!(message.as_ref());

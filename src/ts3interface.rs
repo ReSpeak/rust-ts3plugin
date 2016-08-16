@@ -507,7 +507,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                                 channels as usize) };
                         plugin.post_process_voice_data(&api, server_id, connection_id,
                             samples, channels, channel_speaker_array,
-                            unsafe { &mut *channel_fill_mask });
+                            unsafe { channel_fill_mask.as_mut().unwrap() });
                         // The plugin is ready with editing the voice data so we can return now
                         ReturnValue(true)
                     },
@@ -521,7 +521,7 @@ pub fn manager_thread<T: Plugin>(main_transmitter: Sender<Result<(), ::InitError
                                 channels as usize) };
                         plugin.mixed_playback_voice_data(&api, server_id,
                             samples, channels, channel_speaker_array,
-                            unsafe { &mut *channel_fill_mask });
+                            unsafe { channel_fill_mask.as_mut().unwrap() });
                         // The plugin is ready with editing the voice data so we can return now
                         ReturnValue(true)
                     },
