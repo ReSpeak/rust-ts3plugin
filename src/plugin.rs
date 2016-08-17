@@ -19,7 +19,7 @@ pub enum InitError {
 /// working TeamSpeak plugin you have to call the macro `create_plugin!`
 /// afterwards.
 #[allow(unused_variables)]
-pub trait Plugin {
+pub trait Plugin: 'static + Send {
     // ************************** Required functions ***************************
     /// Called when the plugin is loaded by TeamSpeak.
     fn new(api: &mut ::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
@@ -144,14 +144,20 @@ pub trait Plugin {
 
     /// The voice data is available as 16 bit with 48 KHz. The channels are packed
     /// (interleaved).
+    /// The callbacks with audio data are called from another thread than the
+    /// other functions.
     fn playback_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, samples: &mut [i16], channels: i32) {}
 
+    /// The callbacks with audio data are called from another thread than the
+    /// other functions.
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
     fn post_process_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         connection_id: ::ConnectionId, samples: &mut [i16], channels: i32,
         channel_speaker_array: &[::Speaker], channel_fill_mask: &mut u32) {}
 
+    /// The callbacks with audio data are called from another thread than the
+    /// other functions.
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
     fn mixed_playback_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         samples: &mut [i16], channels: i32, channel_speaker_array: &[::Speaker],
@@ -162,6 +168,8 @@ pub trait Plugin {
     /// can be changed in this callback.
     /// The return value of this function describes if the sound data was altered.
     /// Return `true` if the sound was changed and `false` otherwise.
+    /// The callbacks with audio data are called from another thread than the
+    /// other functions.
     #[cfg_attr(feature="clippy", allow(too_many_arguments))]
     fn captured_voice_data(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
         samples: &mut [i16], channels: i32, send: &mut bool) -> bool { false }
@@ -213,7 +221,7 @@ macro_rules! create_plugin {
 
         #[no_mangle]
         #[doc(hidden)]
-        pub extern "C" fn ts3plugin_init() -> c_int {
+        pub unsafe extern "C" fn ts3plugin_init() -> c_int {
             match $crate::ts3interface::private_init::<$typename>() {
                 Ok(_) => 0,
                 Err($crate::InitError::Failure) => 1,

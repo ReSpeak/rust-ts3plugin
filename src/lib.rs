@@ -43,6 +43,8 @@
 
 extern crate libc;
 extern crate chrono;
+#[macro_use]
+extern crate lazy_static;
 extern crate ts3plugin_sys;
 
 pub use ts3plugin_sys::clientlib_publicdefinitions::*;
