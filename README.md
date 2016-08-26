@@ -17,7 +17,7 @@ Add the following to your `Cargo.toml`:
 ```
 [lib]
 name = "<pluginname>"
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 lazy_static = "*"

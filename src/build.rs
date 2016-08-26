@@ -1,5 +1,6 @@
 extern crate skeptic;
 
+use std::borrow::Cow;
 use std::env;
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
@@ -9,26 +10,27 @@ use std::path::Path;
 
 type Map<K, V> = BTreeMap<K, V>;
 
-//TODO replace &'a str with Cow<'a, str>
 #[derive(Default, Clone)]
 struct Property<'a> {
-    name: &'a str,
-    type_s: &'a str,
-    documentation: &'a str,
+    name: Cow<'a, str>,
+    type_s: Cow<'a, str>,
+    /// If the property should be wrapped into a result.
+    result: bool,
+    documentation: Cow<'a, str>,
     initialize: bool,
     /// Use a fixed function
-    method_name: Option<&'a str>,
+    method_name: Option<Cow<'a, str>>,
     /// The name that is used to initialize this value: enum_name::value_name
-    enum_name: &'a str,
-    value_name: Option<&'a str>,
+    enum_name: Cow<'a, str>,
+    value_name: Option<Cow<'a, str>>,
     /// Map type_s → used function
-    functions: Map<&'a str, &'a str>,
-    /// Types that are transmutable, the standard type that is taken is int
-    transmutable: Vec<&'a str>,
+    functions: Map<Cow<'a, str>, Cow<'a, str>>,
+    /// Types that are transmutable, the standard type that is taken is int.
+    transmutable: Vec<Cow<'a, str>>,
     /// Arguments passed to the function
-    default_args: &'a str,
-    /// Arguments passed to the function when updating the property
-    default_args_update: &'a str,
+    default_args: Cow<'a, str>,
+    /// Arguments passed to the function when updating the property.
+    default_args_update: Cow<'a, str>,
 }
 
 impl<'a> Property<'a> {
@@ -38,33 +40,71 @@ impl<'a> Property<'a> {
             s.push_str(self.documentation.lines()
                 .map(|l| format!("/// {}\n", l)).collect::<String>().as_str());
         }
-        s.push_str(format!("{}: {},\n", self.name, self.type_s).as_str());
+        if self.result {
+            s.push_str(format!("{}: Result<{}, ::Error>,\n", self.name, self.type_s).as_str());
+        } else {
+            s.push_str(format!("{}: {},\n", self.name, self.type_s).as_str());
+        }
         s
     }
 
+    fn create_return_type(&self, is_ref_type: bool, mutable: bool) -> String {
+        // Build the result type
+        let mut result_type = String::new();
+        if self.result {
+            result_type .push_str("Result<")
+        }
+        if is_ref_type {
+            result_type.push('&');
+        }
+        if mutable {
+            result_type.push_str("mut ");
+        }
+        result_type.push_str(self.type_s.as_ref());
+        if self.result {
+            result_type.push_str(", ");
+            if is_ref_type {
+                result_type.push('&');
+            }
+            if mutable {
+                result_type.push_str("mut ");
+            }
+            result_type.push_str("::Error>");
+        }
+        result_type
+    }
+
     fn create_getter(&self) -> String {
-        let is_ref_type = ["String", "Permissions"].contains(&self.type_s) || self.type_s.starts_with("Option<");
+        let is_ref_type = ["String", "Permissions"].contains(&self.type_s.as_ref())
+            || self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
+            || self.type_s.starts_with("Vec<");;
+
         let mut s = String::new();
         // Create the getter
-        s.push_str(format!("pub fn get_{}(&self) -> ", self.name).as_str());
-        if is_ref_type {
-            s.push('&');
-        }
-        s.push_str(format!("{} {{\n", self.type_s).as_str());
+        s.push_str(format!("pub fn get_{}(&self) -> {} {{\n", self.name, self.create_return_type(is_ref_type, false)).as_str());
         s.push_str(indent("", 1).as_str());
         let mut body = String::new();
-        if is_ref_type {
+        if !self.result && is_ref_type {
             body.push('&');
         }
-        body.push_str(format!("self.{}\n", self.name).as_str());
-        s.push_str(format!("{}}}\n", indent(body, 1)).as_str());
+        body.push_str(format!("self.{}", self.name).as_str());
+        if self.result && is_ref_type {
+            body.push_str(".as_ref()");
+        }
+        body.push('\n');
+        s.push_str(indent(body, 1).as_str());
+        s.push_str("}\n");
 
         // Create a mut getter for more complicated types
-        let is_complicated_type = ["Permissions"].contains(&self.type_s) || self.type_s.starts_with("Option<") && is_ref_type;
+        let is_complicated_type = ["Permissions"].contains(&self.type_s.as_ref()) || (self.type_s.starts_with("Optional") && is_ref_type);
         if is_complicated_type {
-            s.push_str(format!("pub fn get_mut_{}(&mut self) -> &mut {} {{\n", self.name, self.type_s).as_str());
+            s.push_str(format!("pub fn get_mut_{}(&mut self) -> {} {{\n", self.name, self.create_return_type(is_ref_type, true)).as_str());
             s.push_str(indent("", 1).as_str());
-            s.push_str(indent(format!("&mut self.{}\n", self.name), 1).as_str());
+            if self.result {
+                s.push_str(indent(format!("self.{}.as_mut()\n", self.name), 1).as_str());
+            } else {
+                s.push_str(indent(format!("&mut self.{}\n", self.name), 1).as_str());
+            }
             s.push_str("}\n");
         }
 
@@ -73,46 +113,50 @@ impl<'a> Property<'a> {
 
     fn create_update(&self) -> String {
         let mut s = String::new();
-        let initialisation = self.intern_create_initialisation(self.default_args_update);
+        let initialisation = self.intern_create_initialisation(self.default_args_update.as_ref());
         if !initialisation.is_empty() {
             // Create the update function
-            s.push_str(format!("fn update_{}(&mut self) -> Result<(), Error> {{\n", self.name).as_str());
-            s.push_str(indent(format!("self.{} = {};\nOk(())\n", self.name, initialisation), 1).as_str());
+            s.push_str(format!("fn update_{}(&mut self) {{\n", self.name).as_str());
+            s.push_str(indent(format!("self.{} = {};\n", self.name, initialisation), 1).as_str());
             s.push_str("}\n");
         }
         s
     }
 
     fn create_initialisation(&self) -> String {
-        self.intern_create_initialisation(self.default_args)
+        if self.result {
+            String::from("Err(::Error::Ok)")
+        } else {
+            self.intern_create_initialisation(self.default_args.as_ref())
+        }
     }
 
     fn intern_create_initialisation(&self, default_args: &str) -> String {
         if !self.initialize {
             return String::new();
         }
-        let value_name = self.value_name.map(|s| s.to_string()).unwrap_or(to_pascal_case(self.name));
+        let value_name = self.value_name.as_ref().map(|s| s.clone()).unwrap_or(to_pascal_case(self.name.as_ref()).into());
         let mut s = String::new();
         // Ignore unknown types
-        if let Some(function) = self.method_name {
+        if let Some(function) = self.method_name.as_ref() {
             // Special defined function
-            s.push_str(format!("try!({}({}{}::{}))", function, default_args,
+            s.push_str(format!("{}({}{}::{})", function, default_args,
                 self.enum_name, value_name).as_str());
-        } else if let Some(function) = self.functions.get(self.type_s) {
+        } else if let Some(function) = self.functions.get(self.type_s.as_ref()) {
             // From function list
-            s.push_str(format!("try!({}({}{}::{}))", function, default_args,
+            s.push_str(format!("{}({}{}::{})", function, default_args,
                 self.enum_name, value_name).as_str());
         } else if self.transmutable.contains(&self.type_s) {
             // Try to get an int
             for t in &["i32", "u64"] {
-                if let Some(function) = self.functions.get(t) {
-                    s.push_str(format!("unsafe {{ transmute(try!({}({}{}::{}))) }}", function, default_args,
+                if let Some(function) = self.functions.get(*t) {
+                    s.push_str(format!("{}({}{}::{}).map(|v| unsafe {{ transmute(v) }})", function, default_args,
                         self.enum_name, value_name).as_str());
                     break;
                 }
             }
         } else {
-            match self.type_s {
+            match self.type_s.as_ref() {
                 "Duration" => {
                     // Try to get an u64
                     let function: &str = if let Some(f) = self.functions.get("u64") {
@@ -122,21 +166,19 @@ impl<'a> Property<'a> {
                     } else {
                         "get_property_as_int"
                     };
-                    s.push_str(format!("Duration::seconds(try!({}({}{}::{})) as i64)",
+                    s.push_str(format!("{}({}{}::{}).map(|d| Duration::seconds(d as i64))",
                         function, default_args, self.enum_name, value_name).as_str())
                 },
                 "bool" => {
                     for t in &["i32", "u64"] {
-                        if let Some(function) = self.functions.get(t) {
-                            s.push_str(format!("try!({}({}{}::{})) != 0", function,
+                        if let Some(function) = self.functions.get(*t) {
+                            s.push_str(format!("{}({}{}::{}).map(|v| v != 0)", function,
                                 default_args, self.enum_name, value_name).as_str());
                             break;
                         }
                     }
                 }
-                _ => if self.type_s.starts_with("Option<") {
-                    s.push_str("None")
-                }
+                _ => {}
             }
         }
         s
@@ -145,96 +187,105 @@ impl<'a> Property<'a> {
 
 #[derive(Default, Clone)]
 struct PropertyBuilder<'a> {
-    name: &'a str,
-    type_s: &'a str,
-    documentation: &'a str,
+    name: Cow<'a, str>,
+    type_s: Cow<'a, str>,
+    result: bool,
+    documentation: Cow<'a, str>,
     initialize: bool,
-    method_name: Option<&'a str>,
-    enum_name: &'a str,
-    value_name: Option<&'a str>,
-    functions: Map<&'a str, &'a str>,
-    transmutable: Vec<&'a str>,
-    default_args: &'a str,
-    default_args_update: &'a str,
+    method_name: Option<Cow<'a, str>>,
+    enum_name: Cow<'a, str>,
+    value_name: Option<Cow<'a, str>>,
+    functions: Map<Cow<'a, str>, Cow<'a, str>>,
+    transmutable: Vec<Cow<'a, str>>,
+    default_args: Cow<'a, str>,
+    default_args_update: Cow<'a, str>,
 }
 
 impl<'a> PropertyBuilder<'a> {
     fn new() -> PropertyBuilder<'a> {
         let mut result = Self::default();
         result.initialize = true;
+        result.result = true;
         result
     }
 
-    fn name(&self, name: &'a str) -> PropertyBuilder<'a> {
+    fn name<S: Into<Cow<'a, str>>>(&self, name: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.name = name;
+        res.name = name.into();
         res
     }
 
-    fn type_s(&self, type_s: &'a str) -> PropertyBuilder<'a> {
+    fn type_s<S: Into<Cow<'a, str>>>(&self, type_s: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.type_s = type_s;
+        res.type_s = type_s.into();
         res
     }
 
-    fn documentation(&self, documentation: &'a str) -> PropertyBuilder<'a> {
+    fn result(&self, result: bool) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.documentation = documentation;
+        res.result = result;
+        res
+    }
+
+    fn documentation<S: Into<Cow<'a, str>>>(&self, documentation: S) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.documentation = documentation.into();
         res
     }
 
     fn initialize(&self, initialize: bool) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.initialize = initialize;
+        res.initialize = initialize.into();
         res
     }
 
-    fn method_name(&self, method_name: &'a str) -> PropertyBuilder<'a> {
+    fn method_name<S: Into<Cow<'a, str>>>(&self, method_name: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.method_name = Some(method_name);
+        res.method_name = Some(method_name.into());
         res
     }
 
-    fn enum_name(&self, enum_name: &'a str) -> PropertyBuilder<'a> {
+    fn enum_name<S: Into<Cow<'a, str>>>(&self, enum_name: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.enum_name = enum_name;
+        res.enum_name = enum_name.into();
         res
     }
 
-    fn value_name(&self, value_name: &'a str) -> PropertyBuilder<'a> {
+    fn value_name<S: Into<Cow<'a, str>>>(&self, value_name: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.value_name = Some(value_name);
+        res.value_name = Some(value_name.into());
         res
     }
 
-    fn functions(&self, functions: Map<&'a str, &'a str>) -> PropertyBuilder<'a> {
+    fn functions<S1: Into<Cow<'a, str>>, S2: Into<Cow<'a, str>>>(&self, functions: Map<S1, S2>) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.functions = functions;
+        res.functions = functions.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
         res
     }
 
-    fn transmutable(&self, transmutable: Vec<&'a str>) -> PropertyBuilder<'a> {
+    fn transmutable<S: Into<Cow<'a, str>>>(&self, transmutable: Vec<S>) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.transmutable = transmutable;
+        res.transmutable = transmutable.into_iter().map(|s| s.into()).collect();
         res
     }
 
-    fn default_args(&self, default_args: &'a str) -> PropertyBuilder<'a> {
+    fn default_args<S: Into<Cow<'a, str>>>(&self, default_args: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.default_args = default_args;
+        res.default_args = default_args.into();
         res
     }
 
-    fn default_args_update(&self, default_args_update: &'a str) -> PropertyBuilder<'a> {
+    fn default_args_update<S: Into<Cow<'a, str>>>(&self, default_args_update: S) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.default_args_update = default_args_update;
+        res.default_args_update = default_args_update.into();
         res
     }
 
-    fn finalize(&self) -> Property<'a> {
+    fn finalize(self) -> Property<'a> {
         Property {
             name: self.name,
             type_s: self.type_s,
+            result: self.result,
             documentation: self.documentation,
             initialize: self.initialize,
             method_name: self.method_name,
@@ -250,30 +301,30 @@ impl<'a> PropertyBuilder<'a> {
 
 struct Struct<'a> {
     /// The name of this struct
-    name: &'a str,
+    name: Cow<'a, str>,
     /// The documentation of this struct
-    documentation: &'a str,
+    documentation: Cow<'a, str>,
     /// Members that will be generated for this struct
     properties: Vec<Property<'a>>,
     /// Code that will be put into the struct part
-    extra_attributes: &'a str,
+    extra_attributes: Cow<'a, str>,
     /// Code that will be inserted into the constructor (::new method)
-    extra_initialisation: &'a str,
+    extra_initialisation: Cow<'a, str>,
     /// Code that will be inserted into the creation of the struct
-    extra_creation: &'a str,
+    extra_creation: Cow<'a, str>,
     /// Arguments that are taken by the constructor
-    constructor_args: &'a str,
+    constructor_args: Cow<'a, str>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct StructBuilder<'a> {
-    name: &'a str,
-    documentation: &'a str,
+    name: Cow<'a, str>,
+    documentation: Cow<'a, str>,
     properties: Vec<Property<'a>>,
-    extra_attributes: &'a str,
-    extra_initialisation: &'a str,
-    extra_creation: &'a str,
-    constructor_args: &'a str,
+    extra_attributes: Cow<'a, str>,
+    extra_initialisation: Cow<'a, str>,
+    extra_creation: Cow<'a, str>,
+    constructor_args: Cow<'a, str>,
 }
 
 impl<'a> StructBuilder<'a> {
@@ -281,42 +332,49 @@ impl<'a> StructBuilder<'a> {
         Self::default()
     }
 
-    fn name(&mut self, name: &'a str) -> &mut StructBuilder<'a> {
-        self.name = name;
-        self
+    fn name<S: Into<Cow<'a, str>>>(&mut self, name: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.name = name.into();
+        res
     }
 
-    fn documentation(&mut self, documentation: &'a str) -> &mut StructBuilder<'a> {
-        self.documentation = documentation;
-        self
+    fn documentation<S: Into<Cow<'a, str>>>(&mut self, documentation: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.documentation = documentation.into();
+        res
     }
 
-    fn properties(&mut self, properties: Vec<Property<'a>>) -> &mut StructBuilder<'a> {
-        self.properties = properties;
-        self
+    fn properties(&mut self, properties: Vec<Property<'a>>) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.properties = properties.into();
+        res
     }
 
-    fn extra_attributes(&mut self, extra_attributes: &'a str) -> &mut StructBuilder<'a> {
-        self.extra_attributes = extra_attributes;
-        self
+    fn extra_attributes<S: Into<Cow<'a, str>>>(&mut self, extra_attributes: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.extra_attributes = extra_attributes.into();
+        res
     }
 
-    fn extra_initialisation(&mut self, extra_initialisation: &'a str) -> &mut StructBuilder<'a> {
-        self.extra_initialisation = extra_initialisation;
-        self
+    fn extra_initialisation<S: Into<Cow<'a, str>>>(&mut self, extra_initialisation: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.extra_initialisation = extra_initialisation.into();
+        res
     }
 
-    fn extra_creation(&mut self, extra_creation: &'a str) -> &mut StructBuilder<'a> {
-        self.extra_creation = extra_creation;
-        self
+    fn extra_creation<S: Into<Cow<'a, str>>>(&mut self, extra_creation: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.extra_creation = extra_creation.into();
+        res
     }
 
-    fn constructor_args(&mut self, constructor_args: &'a str) -> &mut StructBuilder<'a> {
-        self.constructor_args = constructor_args;
-        self
+    fn constructor_args<S: Into<Cow<'a, str>>>(&mut self, constructor_args: S) -> StructBuilder<'a> {
+        let mut res = self.clone();
+        res.constructor_args = constructor_args.into();
+        res
     }
 
-    fn finalize(&self) -> Struct<'a> {
+    fn finalize(self) -> Struct<'a> {
         Struct {
             name: self.name,
             documentation: self.documentation,
@@ -342,7 +400,7 @@ impl<'a> Struct<'a> {
         }
         result.push_str(format!("pub struct {} {{\n{}", self.name, indent(s, 1)).as_str());
         if !self.extra_attributes.is_empty() {
-            result.push_str(format!("\n{}", indent(self.extra_attributes, 1)).as_str());
+            result.push_str(format!("\n{}", indent(self.extra_attributes.as_ref(), 1)).as_str());
         }
         result.push_str("}\n\n");
         result
@@ -375,32 +433,32 @@ impl<'a> Struct<'a> {
         let mut inits = String::new();
         // Initialisation
         if !self.extra_initialisation.is_empty() {
-            inits.push_str(self.extra_initialisation);
+            inits.push_str(self.extra_initialisation.as_ref());
             inits.push('\n');
-        }
-        for prop in &self.properties {
-            let p = prop.create_initialisation();
-            if !p.is_empty() {
-                inits.push_str(format!("let {} = {};\n", prop.name, p).as_str());
-            }
         }
         // Creation
         let mut creats = String::new();
         for prop in &self.properties {
-            creats.push_str(format!("{0}: {0},\n", prop.name).as_str());
+            let p = prop.create_initialisation();
+            let initialisation = if p.is_empty() {
+                prop.name.clone().into_owned()
+            } else {
+                p
+            };
+            creats.push_str(format!("{}: {},\n", prop.name, initialisation).as_str());
         }
         if !self.extra_creation.is_empty() {
             creats.push('\n');
-            creats.push_str(self.extra_creation);
+            creats.push_str(self.extra_creation.as_ref());
         }
 
         let mut result = String::new();
         write!(result, "impl {0} {{
-    fn new({1}) -> Result<{0}, Error> {{
+    fn new({1}) -> {0} {{
 {2}
-        Ok({0} {{
+        {0} {{
 {3}
-        }})
+        }}
     }}\n}}\n\n", self.name, self.constructor_args, indent(inits, 2), indent(creats, 3)).unwrap();
         result
     }
@@ -427,6 +485,7 @@ fn create_server(f: &mut Write) {
     // Optional server data
     let optional_server_data = StructBuilder::new().name("OptionalServerData")
         .documentation("Server properties that have to be fetched explicitely")
+        .constructor_args("id: ServerId")
         .properties(vec![
             builder_string.name("welcome_message").finalize(),
             builder_i32.name("max_clients").finalize(),
@@ -481,36 +540,31 @@ fn create_server(f: &mut Write) {
     let server = StructBuilder::new().name("Server")
         .constructor_args("id: ServerId")
         .extra_attributes("\
-            visible_connections: Map<ConnectionId, Connection>,\n\
-            channels: Map<ChannelId, Channel>,\n\
-            outdated_data: OutdatedServerData,\n\
-            optional_data: Option<OptionalServerData>,\n")
+            outdated_data: OutdatedServerData,\n")
+        //TODO hostbanner... is not set correctly
         .extra_initialisation("\
-            let own_connection_id = try!(Self::query_own_connection_id(id));\n\
+            let own_connection_id = Self::query_own_connection_id(id);\n\
             // These attributes are not in the main struct\n\
-            let hostbanner_mode = unsafe { transmute(try!(Self::get_property_as_int(id, VirtualServerProperties::HostbannerMode))) };\n\
-            let hostmessage_mode = unsafe { transmute(try!(Self::get_property_as_int(id, VirtualServerProperties::HostmessageMode))) };\n\
-            let hostmessage = try!(Self::get_property_as_string(id, VirtualServerProperties::Hostmessage));\n\n\
+            //let hostbanner_mode = Self::get_property_as_int(id, VirtualServerProperties::HostbannerMode).map(|p| unsafe { transmute(p) });\n\
+            let hostmessage_mode = Self::get_property_as_int(id, VirtualServerProperties::HostmessageMode).map(|p| unsafe { transmute(p) });\n\
+            let hostmessage = Self::get_property_as_string(id, VirtualServerProperties::Hostmessage);\n\n\
 
             //TODO\n\
             let created = UTC::now();\n\
             let default_server_group = Permissions;\n\
             let default_channel_group = Permissions;\n\
-            let default_channel_admin_group = Permissions;\n\
-            // Query currently visible connections on this server\n\
-            let visible_connections = Self::query_connections(id);\n\
+            let default_channel_admin_group = Permissions;\n\n\
+
             // Query channels on this server\n\
-            let channels = Self::query_channels(id);\n")
+            let channels = Self::query_channels(id);\n\
+            let optional_data = OptionalServerData::new(id);\n")
         .extra_creation("\
-            visible_connections: visible_connections,\n\
-            channels: channels,\n\
             outdated_data: OutdatedServerData {
     hostmessage: hostmessage,
     hostmessage_mode: hostmessage_mode,\n\
-            },\n\
-            optional_data: None,\n")
+            },\n")
         .properties(vec![
-            builder.name("id").type_s("ServerId").finalize(),
+            builder.name("id").type_s("ServerId").result(false).finalize(),
             builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
             builder.name("own_connection_id").type_s("ConnectionId").finalize(),
             builder_string.name("name").finalize(),
@@ -534,6 +588,9 @@ fn create_server(f: &mut Write) {
             builder_i32.name("reserved_slots").finalize(),
             builder.name("ask_for_privilegekey").type_s("bool").finalize(),
             builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
+            builder.name("visible_connections").type_s("Map<ConnectionId, Connection>").finalize(),
+            builder.name("channels").type_s("Map<ChannelId, Channel>").finalize(),
+            builder.name("optional_data").type_s("OptionalServerData").result(false).finalize(),
         ]).finalize();
 
     // Structs
@@ -550,14 +607,12 @@ impl Server {
     fn get_outdated_data(&self) -> &OutdatedServerData {
         &self.outdated_data
     }
-    fn get_optional_data(&self) -> &Option<OptionalServerData> {
-        &self.optional_data
-    }
 }\n\n".as_bytes()).unwrap();
     f.write_all(server.create_update().as_bytes()).unwrap();
 
     // Initialize variables
     f.write_all(server.create_constructor().as_bytes()).unwrap();
+    f.write_all(optional_server_data.create_constructor().as_bytes()).unwrap();
 }
 
 fn create_channel(f: &mut Write) {
@@ -589,18 +644,19 @@ fn create_channel(f: &mut Write) {
         .documentation("Channel properties that have to be fetched explicitely")
         .constructor_args("server_id: ServerId, channel_id: ChannelId")
         .properties(vec![
-            builder_optional_data.name("channel_id").type_s("ChannelId").finalize(),
-            builder_optional_data.name("server_id").type_s("ServerId").finalize(),
+            builder_optional_data.name("channel_id").type_s("ChannelId").result(false).finalize(),
+            builder_optional_data.name("server_id").type_s("ServerId").result(false).finalize(),
             builder_optional_data.name("description").type_s("String").finalize(),
         ]).finalize();
     // The real channel data
     let channel = StructBuilder::new().name("Channel")
         .constructor_args("server_id: ServerId, id: ChannelId")
         .extra_initialisation("\
-            let parent_channel_id = try!(Self::query_parent_channel_id(server_id, id));\n")
+            let parent_channel_id = Self::query_parent_channel_id(server_id, id);\n\
+            let optional_data = OptionalChannelData::new(server_id, id);\n")
         .properties(vec![
-            builder.name("id").type_s("ChannelId").finalize(),
-            builder.name("server_id").type_s("ServerId").finalize(),
+            builder.name("id").type_s("ChannelId").result(false).finalize(),
+            builder.name("server_id").type_s("ServerId").result(false).finalize(),
             builder.name("parent_channel_id").type_s("ChannelId")
                 .documentation("The id of the parent channel, 0 if there is no parent channel").finalize(),
             builder_string.name("name").finalize(),
@@ -628,7 +684,7 @@ fn create_channel(f: &mut Write) {
             builder_i32.name("icon_id").finalize(),
             builder_bool.name("private").value_name("FlagPrivate").finalize(),
 
-            builder.name("optional_data").type_s("Option<OptionalChannelData>").finalize(),
+            builder.name("optional_data").type_s("OptionalChannelData").result(false).finalize(),
         ]).finalize();
 
     // Structs
@@ -694,8 +750,9 @@ fn create_connection(f: &mut Write) {
         ]).finalize();
     // Optional connection data
     let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
+        .constructor_args("server_id: ServerId, id: ConnectionId")
         .extra_initialisation("\
-            //let client_port = try!(Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort)) as u16;\n")
+            //let client_port = Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort) as u16;\n")
         .properties(vec![
             builder_string.name("version").finalize(),
             builder_string.name("platform").finalize(),
@@ -757,11 +814,14 @@ fn create_connection(f: &mut Write) {
     let connection = StructBuilder::new().name("Connection")
         .constructor_args("server_id: ServerId, id: ConnectionId")
         .extra_initialisation("\
-            let channel_id = try!(Self::query_channel_id(server_id, id));\n\
-            let whispering = try!(Self::query_whispering(server_id, id));\n")
+            let channel_id = Self::query_channel_id(server_id, id);\n\
+            let whispering = Self::query_whispering(server_id, id);\n\
+            let optional_data = OptionalConnectionData::new(server_id, id);\n\
+            let own_data = None;\n\
+            let serverquery_data = None;\n")
         .properties(vec![
-            builder.name("id").type_s("ConnectionId").finalize(),
-            builder.name("server_id").type_s("ServerId").finalize(),
+            builder.name("id").type_s("ConnectionId").result(false).finalize(),
+            builder.name("server_id").type_s("ServerId").result(false).finalize(),
             builder.name("channel_id").type_s("ChannelId").finalize(),
             // ClientProperties
             client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
@@ -777,22 +837,22 @@ fn create_connection(f: &mut Write) {
             client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
             client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
             client_b.name("recording").type_s("bool").value_name("IsRecording").finalize(),
-            client_b.name("database_id").type_s("Option<Permissions>")
+            client_b.name("database_id").type_s("Permissions")
                 .documentation("Only valid data if we have the appropriate permissions.").finalize(),
-            client_b.name("channel_group_id").type_s("Option<Permissions>").finalize(),
-            client_b.name("server_groups").type_s("Option<Vec<Permissions>>").finalize(),
-            client_b.name("talk_power").type_s("Option<i32>").finalize(),
+            client_b.name("channel_group_id").type_s("Permissions").finalize(),
+            client_b.name("server_groups").type_s("Vec<Permissions>").finalize(),
+            client_b.name("talk_power").type_s("i32").finalize(),
             // When this client requested to talk
-            client_b.name("talk_request").type_s("Option<DateTime<UTC>>").finalize(),
-            client_b.name("talk_request_message").type_s("Option<String>").finalize(),
+            client_b.name("talk_request").type_s("DateTime<UTC>").finalize(),
+            client_b.name("talk_request_message").type_s("String").value_name("TalkRequestMsg").finalize(),
 
-            client_b.name("channel_group_inherited_channel_id").type_s("Option<ChannelId>")
+            client_b.name("channel_group_inherited_channel_id").type_s("ChannelId")
                 .documentation("The channel that sets the current channel id of this client.").finalize(),
-            client_b.name("own_data").type_s("Option<OwnConnectionData>")
+            client_b.name("own_data").type_s("Option<OwnConnectionData>").result(false)
                 .documentation("Only set for oneself").finalize(),
-            client_b.name("serverquery_data").type_s("Option<ServerqueryConnectionData>")
+            client_b.name("serverquery_data").type_s("Option<ServerqueryConnectionData>").result(false)
                 .documentation("Only available for serverqueries").finalize(),
-            client_b.name("optional_data").type_s("Option<OptionalConnectionData>").finalize(),
+            client_b.name("optional_data").type_s("OptionalConnectionData").result(false).finalize(),
     ]).finalize();
 
     // Structs
@@ -811,6 +871,7 @@ fn create_connection(f: &mut Write) {
     // Constructors
     //f.write_all(own_connection_data.create_constructor("id: ClientId", &default_functions, "id, ", "ConnectionProperties").as_bytes()).unwrap();
     f.write_all(connection.create_constructor().as_bytes()).unwrap();
+    f.write_all(optional_connection_data.create_constructor().as_bytes()).unwrap();
 }
 
 /// Build parts of lib.rs as most of the structs are very repetitive

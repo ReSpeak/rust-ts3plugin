@@ -99,9 +99,7 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
     // Add the server if we can get information about it
     // and don't have that server cached already.
     if status != ConnectStatus::Connecting && api.get_server(server_id).is_none() {
-        if let Err(error) = api.add_server(server_id) {
-            error!(api, "Can't get server information", error);
-        }
+        api.add_server(server_id);
     }
     // Execute plugin callback
     plugin.connect_status_change(api, server_id, status, error);
@@ -220,7 +218,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
                     if let Some(ref mut old_connection) = old_connection {
                         // Copy optional data from old connection if it exists
                         //TODO do that with the build script
-                        connection.database_id = old_connection.database_id.take();
+                        /*connection.database_id = old_connection.database_id.take();
                         connection.channel_group_id = old_connection.channel_group_id.take();
                         connection.server_groups = old_connection.server_groups.take();
                         connection.talk_power = old_connection.talk_power.take();
@@ -230,7 +228,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
                             old_connection.channel_group_inherited_channel_id.take();
                         connection.own_data = old_connection.own_data.take();
                         connection.serverquery_data = old_connection.serverquery_data.take();
-                        connection.optional_data = old_connection.optional_data.take();
+                        connection.optional_data = old_connection.optional_data.take();*/
                     }
                     Ok(())
                 },
@@ -261,8 +259,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
     let mut plugin = &mut data.1;
     if old_channel_id == ::ChannelId(0) {
         // Connection connected, this will also be called for ourselves
-        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-        if let Err(error) = err {
+        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+        if let Some(error) = err {
             error!(api, "Can't get connection information", error);
         }
         plugin.connection_changed(api, server_id, connection_id, true, move_message)
@@ -274,8 +272,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
         // Connection announced
         match visibility {
             Visibility::Enter => {
-                let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-                if let Err(error) = err {
+                let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+                if let Some(error) = err {
                     error!(api, "Can't get connection information", error);
                 }
                 plugin.connection_announced(api, server_id, connection_id, true);
@@ -290,8 +288,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
         // Connection switched channel
         // Add the connection if it entered visibility
         if visibility == Visibility::Enter {
-            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-            if let Err(error) = err {
+            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+            if let Some(error) = err {
                 error!(api, "Can't get connection information", error);
             }
         }
@@ -299,7 +297,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
         {
             if let Some(connection) = api.get_mut_server(server_id)
                 .and_then(|s| s.get_mut_connection(connection_id)) {
-                connection.channel_id = new_channel_id;
+                connection.channel_id = Ok(new_channel_id);
             }
         }
         plugin.connection_move(api, server_id, connection_id,
@@ -336,8 +334,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connec
     api.try_update_invoker(server_id, &invoker);
     if old_channel_id == ::ChannelId(0) {
         // Connection connected, this will also be called for ourselves
-        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-        if let Err(error) = err {
+        let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+        if let Some(error) = err {
             error!(api, "Can't get connection information", error);
         }
         plugin.connection_changed(api, server_id, connection_id, true, move_message)
@@ -349,8 +347,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connec
         // Connection announced
         match visibility {
             Visibility::Enter => {
-                let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-                if let Err(error) = err {
+                let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+                if let Some(error) = err {
                     error!(api, "Can't get connection information", error);
                 }
                 plugin.connection_announced(api, server_id, connection_id, true);
@@ -365,8 +363,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connec
         // Connection switched channel
         // Add the connection if it entered visibility
         if visibility == Visibility::Enter {
-            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-            if let Err(error) = err {
+            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+            if let Some(error) = err {
                 error!(api, "Can't get connection information", error);
             }
         }
@@ -374,7 +372,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connec
         {
             if let Some(connection) = api.get_mut_server(server_id)
                 .and_then(|s| s.get_mut_connection(connection_id)) {
-                connection.channel_id = new_channel_id;
+                connection.channel_id = Ok(new_channel_id);
             }
         }
         plugin.connection_moved(api, server_id, connection_id,
@@ -404,8 +402,8 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(server_id: u64,
     // Connection announced
     match visibility {
         Visibility::Enter => {
-            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id);
-            if let Err(error) = err {
+            let err = api.get_mut_server(server_id).unwrap().add_connection(connection_id).err();
+            if let Some(error) = err {
                 error!(api, "Can't get connection information", error);
             }
             plugin.connection_announced(api, server_id, connection_id, true);
@@ -474,18 +472,9 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u6
     // Seems like I really like constructions like that, I failed to do it simpler
     // because I can't borrow api to print an error message in the inner part.
     if let Err(error) = if let Some(channel) = api.get_mut_server(server_id)
-                .unwrap().get_mut_channel(channel_id) {
-            if channel.get_optional_data().is_none() {
-                match ::OptionalChannelData::new(server_id, channel_id) {
-                    Ok(data) => {
-                        channel.optional_data = Some(data);
-                        Ok(())
-                    },
-                    Err(error) => Err(error),
-                }
-            } else {
-                channel.get_mut_optional_data().as_mut().unwrap().update_description()
-            }
+            .unwrap().get_mut_channel(channel_id) {
+            channel.get_mut_optional_data().update_description();
+            channel.get_optional_data().get_description().map(|_| ()).map_err(|e| *e)
         } else {
             Ok(())
         } {
@@ -516,7 +505,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64,
                     let mut channel = server.get_mut_channel(channel_id).unwrap();
                     if let Some(ref mut old_channel) = old_channel {
                         // Copy optional data from old channel if it exists
-                        channel.optional_data = old_channel.optional_data.take();
+                        //TODO channel.optional_data = old_channel.optional_data.take();
                     }
                     Ok(())
                 },
@@ -607,7 +596,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(server_id: u64,
                     let mut channel = server.get_mut_channel(channel_id).unwrap();
                     if let Some(ref mut old_channel) = old_channel {
                         // Copy optional data from old channel if it exists
-                        channel.optional_data = old_channel.optional_data.take();
+                        //TODO channel.optional_data = old_channel.optional_data.take();
                     }
                     Ok(())
                 },
@@ -657,7 +646,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
     api.try_update_invoker(server_id, &invoker);
     plugin.channel_moved(api, server_id, channel_id, new_parent_channel_id, invoker);
     if let Some(channel) = api.get_mut_server(server_id).and_then(|s| s.get_mut_channel(channel_id)) {
-        channel.parent_channel_id = new_parent_channel_id;
+        channel.parent_channel_id = Ok(new_parent_channel_id);
     }
 }
 
@@ -760,7 +749,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(server_id: u64,
     } else if let Some(connection) = api.get_mut_server(server_id).and_then(|s|
         // Update the current channel of the connection
         s.get_mut_connection(connection_id)) {
-        connection.channel_id = new_channel_id;
+        connection.channel_id = Ok(new_channel_id);
     }
 }
 
@@ -839,8 +828,8 @@ pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(server_id: u64,
     plugin.talking_changed(api, server_id, connection_id, talking, whispering);
     // Update the connection
     if let Some(connection) = api.get_mut_server(server_id).and_then(|s| s.get_mut_connection(connection_id)) {
-        connection.talking = talking;
-        connection.whispering = whispering;
+        connection.talking = Ok(talking);
+        connection.whispering = Ok(whispering);
     }
 }
 
