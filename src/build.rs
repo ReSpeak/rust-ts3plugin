@@ -17,10 +17,16 @@ struct Property<'a> {
     /// If the property should be wrapped into a result.
     result: bool,
     documentation: Cow<'a, str>,
-    initialize: bool,
+    initialise: bool,
+    /// The code that creates the content of this property.
+    initialisation: Option<Cow<'a, str>>,
+    /// The code that updates the content of this property.
+    update: Option<Cow<'a, str>>,
+    /// If an update method should be generated for this property.
+    should_update: bool,
     /// Use a fixed function
     method_name: Option<Cow<'a, str>>,
-    /// The name that is used to initialize this value: enum_name::value_name
+    /// The name that is used to initialise this value: enum_name::value_name
     enum_name: Cow<'a, str>,
     value_name: Option<Cow<'a, str>>,
     /// Map type_s → used function
@@ -113,7 +119,7 @@ impl<'a> Property<'a> {
 
     fn create_update(&self) -> String {
         let mut s = String::new();
-        let initialisation = self.intern_create_initialisation(self.default_args_update.as_ref());
+        let initialisation = self.intern_create_initialisation(self.default_args_update.as_ref(), true);
         if !initialisation.is_empty() {
             // Create the update function
             s.push_str(format!("fn update_{}(&mut self) {{\n", self.name).as_str());
@@ -127,13 +133,17 @@ impl<'a> Property<'a> {
         if self.result {
             String::from("Err(::Error::Ok)")
         } else {
-            self.intern_create_initialisation(self.default_args.as_ref())
+            self.intern_create_initialisation(self.default_args.as_ref(), false)
         }
     }
 
-    fn intern_create_initialisation(&self, default_args: &str) -> String {
-        if !self.initialize {
+    fn intern_create_initialisation(&self, default_args: &str, update: bool) -> String {
+        if !self.initialise || (update && !self.should_update) {
             return String::new();
+        } else if update && self.update.is_some() {
+            return self.update.as_ref().unwrap().clone().into_owned();
+        } else if self.initialisation.is_some() {
+            return self.initialisation.as_ref().unwrap().clone().into_owned();
         }
         let value_name = self.value_name.as_ref().map(|s| s.clone()).unwrap_or(to_pascal_case(self.name.as_ref()).into());
         let mut s = String::new();
@@ -191,7 +201,10 @@ struct PropertyBuilder<'a> {
     type_s: Cow<'a, str>,
     result: bool,
     documentation: Cow<'a, str>,
-    initialize: bool,
+    initialise: bool,
+    initialisation: Option<Cow<'a, str>>,
+    update: Option<Cow<'a, str>>,
+    should_update: bool,
     method_name: Option<Cow<'a, str>>,
     enum_name: Cow<'a, str>,
     value_name: Option<Cow<'a, str>>,
@@ -204,8 +217,9 @@ struct PropertyBuilder<'a> {
 impl<'a> PropertyBuilder<'a> {
     fn new() -> PropertyBuilder<'a> {
         let mut result = Self::default();
-        result.initialize = true;
+        result.initialise = true;
         result.result = true;
+        result.should_update = true;
         result
     }
 
@@ -233,9 +247,27 @@ impl<'a> PropertyBuilder<'a> {
         res
     }
 
-    fn initialize(&self, initialize: bool) -> PropertyBuilder<'a> {
+    fn initialise(&self, initialise: bool) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.initialize = initialize.into();
+        res.initialise = initialise.into();
+        res
+    }
+
+    fn initialisation<S: Into<Cow<'a, str>>>(&self, initialisation: S) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.initialisation = Some(initialisation.into());
+        res
+    }
+
+    fn update<S: Into<Cow<'a, str>>>(&self, update: S) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.update = Some(update.into());
+        res
+    }
+
+    fn should_update(&self, should_update: bool) -> PropertyBuilder<'a> {
+        let mut res = self.clone();
+        res.should_update = should_update.into();
         res
     }
 
@@ -287,7 +319,10 @@ impl<'a> PropertyBuilder<'a> {
             type_s: self.type_s,
             result: self.result,
             documentation: self.documentation,
-            initialize: self.initialize,
+            initialise: self.initialise,
+            initialisation: self.initialisation,
+            update: self.update,
+            should_update: self.should_update,
             method_name: self.method_name,
             enum_name: self.enum_name,
             value_name: self.value_name,
@@ -543,39 +578,38 @@ fn create_server(f: &mut Write) {
             outdated_data: OutdatedServerData,\n")
         //TODO hostbanner... is not set correctly
         .extra_initialisation("\
-            let own_connection_id = Self::query_own_connection_id(id);\n\
             // These attributes are not in the main struct\n\
             //let hostbanner_mode = Self::get_property_as_int(id, VirtualServerProperties::HostbannerMode).map(|p| unsafe { transmute(p) });\n\
             let hostmessage_mode = Self::get_property_as_int(id, VirtualServerProperties::HostmessageMode).map(|p| unsafe { transmute(p) });\n\
             let hostmessage = Self::get_property_as_string(id, VirtualServerProperties::Hostmessage);\n\n\
 
             //TODO\n\
-            let created = UTC::now();\n\
+            /*let created = UTC::now();\n\
             let default_server_group = Permissions;\n\
             let default_channel_group = Permissions;\n\
             let default_channel_admin_group = Permissions;\n\n\
 
             // Query channels on this server\n\
             let channels = Self::query_channels(id);\n\
-            let optional_data = OptionalServerData::new(id);\n")
+            let optional_data = OptionalServerData::new(id);*/\n")
         .extra_creation("\
             outdated_data: OutdatedServerData {
     hostmessage: hostmessage,
     hostmessage_mode: hostmessage_mode,\n\
             },\n")
         .properties(vec![
-            builder.name("id").type_s("ServerId").result(false).finalize(),
+            builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).finalize(),
             builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
-            builder.name("own_connection_id").type_s("ConnectionId").finalize(),
+            builder.name("own_connection_id").type_s("ConnectionId").update("Self::query_own_connection_id(self.id)").finalize(),
             builder_string.name("name").finalize(),
             builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
             builder_string.name("platform").finalize(),
             builder_string.name("version").finalize(),
-            builder.name("created").type_s("DateTime<UTC>").finalize(),
+            builder.name("created").type_s("DateTime<UTC>").update("Ok(UTC::now())").finalize(),
             builder.name("codec_encryption_mode").type_s("CodecEncryptionMode").finalize(),
-            builder.name("default_server_group").type_s("Permissions").finalize(),
-            builder.name("default_channel_group").type_s("Permissions").finalize(),
-            builder.name("default_channel_admin_group").type_s("Permissions").finalize(),
+            builder.name("default_server_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
+            builder.name("default_channel_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
+            builder.name("default_channel_admin_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
             builder_string.name("hostbanner_url").finalize(),
             builder_string.name("hostbanner_gfx_url").finalize(),
             builder.name("hostbanner_gfx_interval").type_s("Duration").finalize(),
@@ -589,8 +623,8 @@ fn create_server(f: &mut Write) {
             builder.name("ask_for_privilegekey").type_s("bool").finalize(),
             builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
             builder.name("visible_connections").type_s("Map<ConnectionId, Connection>").finalize(),
-            builder.name("channels").type_s("Map<ChannelId, Channel>").finalize(),
-            builder.name("optional_data").type_s("OptionalServerData").result(false).finalize(),
+            builder.name("channels").type_s("Map<ChannelId, Channel>").update("Self::query_channels(self.id)").finalize(),
+            builder.name("optional_data").type_s("OptionalServerData").result(false).initialisation("OptionalServerData::new(id)").update("OptionalServerData::new(self.id)").finalize(),
         ]).finalize();
 
     // Structs
@@ -651,13 +685,10 @@ fn create_channel(f: &mut Write) {
     // The real channel data
     let channel = StructBuilder::new().name("Channel")
         .constructor_args("server_id: ServerId, id: ChannelId")
-        .extra_initialisation("\
-            let parent_channel_id = Self::query_parent_channel_id(server_id, id);\n\
-            let optional_data = OptionalChannelData::new(server_id, id);\n")
         .properties(vec![
             builder.name("id").type_s("ChannelId").result(false).finalize(),
             builder.name("server_id").type_s("ServerId").result(false).finalize(),
-            builder.name("parent_channel_id").type_s("ChannelId")
+            builder.name("parent_channel_id").type_s("ChannelId").update("Self::query_parent_channel_id(self.server_id, self.id)")
                 .documentation("The id of the parent channel, 0 if there is no parent channel").finalize(),
             builder_string.name("name").finalize(),
             builder_string.name("topic").finalize(),
@@ -684,7 +715,7 @@ fn create_channel(f: &mut Write) {
             builder_i32.name("icon_id").finalize(),
             builder_bool.name("private").value_name("FlagPrivate").finalize(),
 
-            builder.name("optional_data").type_s("OptionalChannelData").result(false).finalize(),
+            builder.name("optional_data").type_s("OptionalChannelData").initialisation("OptionalChannelData::new(server_id, id)").update("OptionalChannelData::new(self.server_id, self.id)").result(false).finalize(),
         ]).finalize();
 
     // Structs
@@ -751,9 +782,9 @@ fn create_connection(f: &mut Write) {
     // Optional connection data
     let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
         .constructor_args("server_id: ServerId, id: ConnectionId")
-        .extra_initialisation("\
-            //let client_port = Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort) as u16;\n")
         .properties(vec![
+            builder.name("id").type_s("ConnectionId").result(false).finalize(),
+            builder.name("server_id").type_s("ServerId").result(false).finalize(),
             builder_string.name("version").finalize(),
             builder_string.name("platform").finalize(),
             builder.name("created").type_s("DateTime<UTC>").finalize(),
@@ -764,7 +795,7 @@ fn create_connection(f: &mut Write) {
             builder.name("connected_time").type_s("Duration").finalize(),
             builder.name("idle_time").type_s("Duration").finalize(),
             builder_string.name("client_ip").finalize(),
-            builder.name("client_port").type_s("u16").finalize(),
+            builder.name("client_port").type_s("u16").update("Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort) as u16").finalize(),
             // Network
             builder_u64.name("packets_sent_speech").finalize(),
             builder_u64.name("packets_sent_keepalive").finalize(),
@@ -814,20 +845,18 @@ fn create_connection(f: &mut Write) {
     let connection = StructBuilder::new().name("Connection")
         .constructor_args("server_id: ServerId, id: ConnectionId")
         .extra_initialisation("\
-            let channel_id = Self::query_channel_id(server_id, id);\n\
-            let whispering = Self::query_whispering(server_id, id);\n\
             let optional_data = OptionalConnectionData::new(server_id, id);\n\
             let own_data = None;\n\
             let serverquery_data = None;\n")
         .properties(vec![
             builder.name("id").type_s("ConnectionId").result(false).finalize(),
             builder.name("server_id").type_s("ServerId").result(false).finalize(),
-            builder.name("channel_id").type_s("ChannelId").finalize(),
+            builder.name("channel_id").type_s("ChannelId").update("Self::query_channel_id(self.server_id, self.id)").finalize(),
             // ClientProperties
             client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
             client_b_string.name("name").value_name("Nickname").finalize(),
             client_b.name("talking").type_s("TalkStatus").value_name("FlagTalking").finalize(),
-            client_b.name("whispering").type_s("bool").initialize(false).finalize(),
+            client_b.name("whispering").type_s("bool").update("Self::query_whispering(self.server_id, self.id)").finalize(),
             client_b.name("away").type_s("AwayStatus").finalize(),
             client_b_string.name("away_message").finalize(),
             client_b.name("input_muted").type_s("MuteInputStatus").finalize(),
