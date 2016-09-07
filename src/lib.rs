@@ -94,7 +94,7 @@ pub struct TsApi {
 /// A struct for convenience. The invoker is maybe not visible to the user,
 /// but we can get events caused by him, so some information about him
 /// are passed along with his id.
-#[derive(Eq)]
+#[derive(Eq, Clone)]
 pub struct Invoker {
     id: ConnectionId,
     uid: String,
@@ -103,6 +103,7 @@ pub struct Invoker {
 
 /// The possible receivers of a message. A message can be sent to a specific
 /// connection, to the current channel chat or to the server chat.
+#[derive(Clone)]
 pub enum MessageReceiver {
     Connection(ConnectionId),
     Channel,
@@ -110,6 +111,7 @@ pub enum MessageReceiver {
 }
 
 /// Permissions - TODO not yet implemented
+#[derive(Clone)]
 pub struct Permissions;
 
 /// A wrapper for a server id.
@@ -235,7 +237,9 @@ impl Server {
                 let mut counter = 0;
                 while *result.offset(counter) != 0 {
                     let connection_id = ConnectionId(*result.offset(counter));
-                    map.insert(connection_id, Connection::new(id, connection_id));
+                    let mut connection = Connection::new(id, connection_id);
+                    connection.update();
+                    map.insert(connection_id, connection);
                     counter += 1;
                 }
             }
@@ -258,7 +262,9 @@ impl Server {
                 let mut counter = 0;
                 while *result.offset(counter) != 0 {
                     let channel_id = ChannelId(*result.offset(counter));
-                    map.insert(channel_id, Channel::new(id, channel_id));
+                    let mut channel = Channel::new(id, channel_id);
+                    channel.update();
+                    map.insert(channel_id, channel);
                     counter += 1;
                 }
             }
@@ -270,24 +276,23 @@ impl Server {
 
     // ********** Private Interface **********
 
-    fn add_connection(&mut self, connection_id: ConnectionId) -> Result<&mut Connection, Error> {
-        match self.visible_connections {
-            Ok(ref mut cs) => {
-                cs.insert(connection_id, Connection::new(self.id, connection_id));
-                Ok(cs.get_mut(&connection_id).unwrap())
-            }
-            Err(error) => Err(error),
-        }
+    fn add_connection(&mut self, connection_id: ConnectionId) -> &mut Connection {
+        let mut connection = Connection::new(self.id, connection_id);
+        connection.update();
+        self.visible_connections.insert(connection_id, connection);
+        self.visible_connections.get_mut(&connection_id).unwrap()
     }
 
     fn remove_connection(&mut self, connection_id: ConnectionId) -> Option<Connection> {
-        self.visible_connections.as_mut().ok().and_then(|mut cs| cs.remove(&connection_id))
+        self.visible_connections.remove(&connection_id)
     }
 
     fn add_channel(&mut self, channel_id: ChannelId) -> Result<&mut Channel, Error> {
         match self.channels {
             Ok(ref mut cs) => {
-                cs.insert(channel_id, Channel::new(self.id, channel_id));
+                let mut channel = Channel::new(self.id, channel_id);
+                channel.update();
+                cs.insert(channel_id, channel);
                 Ok(cs.get_mut(&channel_id).unwrap())
             }
             Err(error) => Err(error),
@@ -302,10 +307,7 @@ impl Server {
 
     /// Get the ids of all visible connections on this server.
     pub fn get_connection_ids(&self) -> Vec<ConnectionId> {
-        match self.visible_connections {
-            Ok(ref cs) => cs.keys().cloned().collect(),
-            Err(_) => Vec::new(),
-        }
+        self.visible_connections.keys().cloned().collect()
     }
 
     /// Get the ids of all channels on this server.
@@ -319,13 +321,13 @@ impl Server {
     /// Get the connection on this server that has the specified id, returns
     /// `None` if there is no such connection.
     pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {
-        self.visible_connections.as_ref().ok().and_then(|cs| cs.get(&connection_id))
+        self.visible_connections.get(&connection_id)
     }
 
     /// Get the mutable connection on this server that has the specified id, returns
     /// `None` if there is no such connection.
     pub fn get_mut_connection(&mut self, connection_id: ConnectionId) -> Option<&mut Connection> {
-        self.visible_connections.as_mut().ok().and_then(|cs| cs.get_mut(&connection_id))
+        self.visible_connections.get_mut(&connection_id)
     }
 
     /// Get the channel on this server that has the specified id, returns
@@ -597,9 +599,15 @@ impl TsApi {
             Error::Ok => unsafe {
                 let mut counter = 0;
                 while *result.offset(counter) != 0 {
-                    //TODO would normally throw Error::NotConnected if tabs without
-                    // connected servers
-                    self.add_server(ServerId(*result.offset(counter)));
+                    // Test if we have a connection to this server.
+                    // We get open tabs, even if they are disconnected.
+                    let mut status: c_int = 0;
+                    let res: Error = transmute((ts3functions.as_ref()
+                        .expect("Functions should be loaded").get_connection_status)
+                            (*result.offset(counter), &mut status));
+                    if res == Error::Ok && transmute::<c_int, ConnectStatus>(status) != ConnectStatus::Disconnected {
+                        self.add_server(ServerId(*result.offset(counter)));
+                    }
                     counter += 1;
                 }
             },
@@ -648,7 +656,9 @@ impl TsApi {
 
     fn add_server(&mut self, server_id: ServerId) -> &mut Server {
         self.servers.insert(server_id, Server::new(server_id));
-        self.servers.get_mut(&server_id).unwrap()
+        let mut server = self.servers.get_mut(&server_id).unwrap();
+        server.update();
+        server
     }
 
     /// Returns true if a server was removed

@@ -249,7 +249,7 @@ impl<'a> PropertyBuilder<'a> {
 
     fn initialise(&self, initialise: bool) -> PropertyBuilder<'a> {
         let mut res = self.clone();
-        res.initialise = initialise.into();
+        res.initialise = initialise;
         res
     }
 
@@ -381,7 +381,7 @@ impl<'a> StructBuilder<'a> {
 
     fn properties(&mut self, properties: Vec<Property<'a>>) -> StructBuilder<'a> {
         let mut res = self.clone();
-        res.properties = properties.into();
+        res.properties = properties;
         res
     }
 
@@ -433,7 +433,7 @@ impl<'a> Struct<'a> {
         if !self.documentation.is_empty() {
             result.push_str(format!("/// {}\n", self.documentation).as_str());
         }
-        result.push_str(format!("pub struct {} {{\n{}", self.name, indent(s, 1)).as_str());
+        result.push_str(format!("#[derive(Clone)]\npub struct {} {{\n{}", self.name, indent(s, 1)).as_str());
         if !self.extra_attributes.is_empty() {
             result.push_str(format!("\n{}", indent(self.extra_attributes.as_ref(), 1)).as_str());
         }
@@ -452,10 +452,36 @@ impl<'a> Struct<'a> {
     }
 
     fn create_update(&self) -> String {
+        // The content that holds all update methods
         let mut s = String::new();
+        // The update() method
+        let mut updates = String::new();
+
         for prop in &self.properties {
-            s.push_str(prop.create_update().as_str());
+            let update = prop.create_update();
+            if !update.is_empty() {
+                s.push_str(update.as_str());
+                updates.push_str(format!("self.update_{}();\n", prop.name).as_str());
+            }
         }
+        // Add an update method for everything
+        s.push_str("\nfn update(&mut self) {\n");
+        s.push_str(indent(updates, 1).as_str());
+        s.push_str("}\n");
+
+        // Add update_from
+        let mut updates = String::new();
+        for prop in &self.properties {
+            if prop.result {
+                updates.push_str(format!("if self.{}.is_err() {{\n", prop.name).as_str());
+                updates.push_str(indent(format!("self.{0} = other.{0}.clone();", prop.name), 1).as_str());
+                updates.push_str("}\n");
+            }
+        }
+        s.push_str("fn update_from(&mut self, other: &Self) {\n");
+        s.push_str(indent(updates, 1).as_str());
+        s.push_str("}\n");
+
         let mut result = String::new();
         write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
         result
@@ -622,7 +648,7 @@ fn create_server(f: &mut Write) {
             builder_i32.name("reserved_slots").finalize(),
             builder.name("ask_for_privilegekey").type_s("bool").finalize(),
             builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
-            builder.name("visible_connections").type_s("Map<ConnectionId, Connection>").finalize(),
+            builder.name("visible_connections").type_s("Map<ConnectionId, Connection>").result(false).initialisation("Map::new()").update("Self::query_connections(self.id)").finalize(),
             builder.name("channels").type_s("Map<ChannelId, Channel>").update("Self::query_channels(self.id)").finalize(),
             builder.name("optional_data").type_s("OptionalServerData").result(false).initialisation("OptionalServerData::new(id)").update("OptionalServerData::new(self.id)").finalize(),
         ]).finalize();
