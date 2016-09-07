@@ -20,10 +20,8 @@ name = "<pluginname>"
 crate-type = ["cdylib"]
 
 [dependencies]
-lazy_static = "*"
-
-[dependencies.ts3plugin]
-git = "https://github.com/Flakebi/rust-ts3plugin"
+lazy_static = "0.2"
+ts3plugin = "0.1"
 ```
 
 This code can be used to make your library a TeamSpeak plugin:

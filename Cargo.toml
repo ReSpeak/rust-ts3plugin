@@ -1,12 +1,13 @@
 [package]
 name = "ts3plugin"
-version = "0.2.0"
+version = "0.1.0"
 authors = ["Flakebi <flakebi@t-online.de>"]
 description = """
-An abstraction layer that simlifies creating TeamSpeak3 plugins
+An abstraction layer that simplifies creating TeamSpeak3 plugins
 and stores received data to provide a more convenient API.
 """
 repository = "https://github.com/Flakebi/rust-ts3plugin"
+documentation = "https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/"
 readme = "README.md"
 keywords = ["plugin", "TeamSpeak3"]
 license = "MIT/Apache-2.0"
@@ -34,5 +35,5 @@ skeptic = "0.6"
 
 # Use `cargo build --features "clippy"` to see style lints
 [dependencies.clippy]
-version = "*"
+version = "0"
 optional = true
