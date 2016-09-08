@@ -681,6 +681,23 @@ impl TsApi {
         }
     }
 
+    fn get_path(fun: extern fn(path: *mut c_char, max_len: size_t)) -> String {
+        const START_SIZE: usize = 512;
+        const MAX_SIZE: usize = 1000000;
+        let mut size = START_SIZE;
+        loop {
+            let mut buf = vec![0 as u8; size];
+            fun(buf.as_mut_ptr() as *mut c_char, size - 1);
+            let s = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) };
+            let result = s.to_string_lossy();
+            if result.len() >= (size - 2)  && size < MAX_SIZE {
+                size *= 2;
+            } else {
+                return result.into_owned();
+            }
+        }
+    }
+
     // ********** Public Interface **********
 
     /// Get all server ids to which this client is currently connected.
@@ -718,6 +735,30 @@ impl TsApi {
             let text = to_cstring!(message.as_ref());
             (ts3functions.as_ref().expect("Functions should be loaded").print_message_to_current_tab)
                     (text.as_ptr());
+        }
+    }
+
+    pub fn get_app_path(&self) -> String {
+        unsafe {
+            TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_app_path)
+        }
+    }
+
+    pub fn get_resources_path(&self) -> String {
+        unsafe {
+            TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_resources_path)
+        }
+    }
+
+    pub fn get_config_path(&self) -> String {
+        unsafe {
+            TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_config_path)
+        }
+    }
+
+    pub fn get_plugin_path(&self) -> String {
+        unsafe {
+            TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_plugin_path)
         }
     }
 }
