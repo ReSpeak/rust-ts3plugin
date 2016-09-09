@@ -56,7 +56,7 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 pub use plugin::*;
 
 use libc::size_t;
-use std::collections::BTreeMap;
+use std::collections::BTreeMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
 use chrono::*;
@@ -79,8 +79,6 @@ macro_rules! to_string {
 // Declare modules here so the macros are visible in the modules
 pub mod ts3interface;
 pub mod plugin;
-
-type Map<K, V> = BTreeMap<K, V>;
 
 // Import automatically generated structs
 include!(concat!(env!("OUT_DIR"), "/structs.rs"));
