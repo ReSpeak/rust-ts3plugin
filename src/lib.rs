@@ -41,7 +41,6 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
-extern crate libc;
 extern crate chrono;
 #[macro_use]
 extern crate lazy_static;
@@ -55,7 +54,6 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
-use libc::size_t;
 use std::collections::BTreeMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
@@ -184,7 +182,7 @@ impl Server {
             let mut name: *mut c_char = std::ptr::null_mut();
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_string)
-                    (id.0, property as size_t, &mut name));
+                    (id.0, property as usize, &mut name));
             match res {
                 Error::Ok => Ok(to_string!(name)),
                 _ => Err(res)
@@ -198,7 +196,7 @@ impl Server {
             let mut number: c_int = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_int)
-                    (id.0, property as size_t, &mut number));
+                    (id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number as i32),
                 _ => Err(res)
@@ -212,7 +210,7 @@ impl Server {
             let mut number: u64 = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_server_variable_as_uint64)
-                    (id.0, property as size_t, &mut number));
+                    (id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number),
                 _ => Err(res)
@@ -395,7 +393,7 @@ impl Channel {
             let mut name: *mut c_char = std::ptr::null_mut();
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_channel_variable_as_string)
-                    (server_id.0, id.0, property as size_t, &mut name));
+                    (server_id.0, id.0, property as usize, &mut name));
             match res {
                 Error::Ok => Ok(to_string!(name)),
                 _ => Err(res)
@@ -409,7 +407,7 @@ impl Channel {
             let mut number: c_int = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_channel_variable_as_int)
-                    (server_id.0, id.0, property as size_t, &mut number));
+                    (server_id.0, id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number as i32),
                 _ => Err(res)
@@ -423,7 +421,7 @@ impl Channel {
             let mut number: u64 = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_channel_variable_as_uint64)
-                    (server_id.0, id.0, property as size_t, &mut number));
+                    (server_id.0, id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number as i32),
                 _ => Err(res)
@@ -475,7 +473,7 @@ impl Connection {
             let mut name: *mut c_char = std::ptr::null_mut();
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_connection_variable_as_string)
-                    (server_id.0, id.0, property as size_t, &mut name));
+                    (server_id.0, id.0, property as usize, &mut name));
             match res {
                 Error::Ok => Ok(to_string!(name)),
                 _ => Err(res)
@@ -489,7 +487,7 @@ impl Connection {
             let mut number: u64 = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_connection_variable_as_uint64)
-                    (server_id.0, id.0, property as size_t, &mut number));
+                    (server_id.0, id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number),
                 _ => Err(res)
@@ -503,7 +501,7 @@ impl Connection {
             let mut number: f64 = 0.0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_connection_variable_as_double)
-                    (server_id.0, id.0, property as size_t, &mut number));
+                    (server_id.0, id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number),
                 _ => Err(res)
@@ -517,7 +515,7 @@ impl Connection {
             let mut name: *mut c_char = std::ptr::null_mut();
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_client_variable_as_string)
-                    (server_id.0, id.0, property as size_t, &mut name));
+                    (server_id.0, id.0, property as usize, &mut name));
             match res {
                 Error::Ok => Ok(to_string!(name)),
                 _ => Err(res)
@@ -531,7 +529,7 @@ impl Connection {
             let mut number: c_int = 0;
             let res: Error = transmute((ts3functions.as_ref()
                 .expect("Functions should be loaded").get_client_variable_as_int)
-                    (server_id.0, id.0, property as size_t, &mut number));
+                    (server_id.0, id.0, property as usize, &mut number));
             match res {
                 Error::Ok => Ok(number),
                 _ => Err(res)
@@ -699,7 +697,7 @@ impl TsApi {
     /// A reusable function that takes a TeamSpeak3 api function like `get_plugin_path`
     /// and returns the path.
     /// The buffer that holds the path will be automatically enlarged.
-    fn get_path(fun: extern fn(path: *mut c_char, max_len: size_t)) -> String {
+    fn get_path(fun: extern fn(path: *mut c_char, max_len: usize)) -> String {
         const START_SIZE: usize = 512;
         const MAX_SIZE: usize = 1000000;
         let mut size = START_SIZE;
