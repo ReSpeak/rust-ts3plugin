@@ -59,9 +59,10 @@ use libc::size_t;
 use std::collections::BTreeMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
+use std::os::raw::{c_char, c_int};
 use chrono::*;
 
-/// Converts a normal string to a CString
+/// Converts a normal string to a CString.
 macro_rules! to_cstring {
     ($string: expr) => {
         CString::new($string).unwrap_or(
@@ -69,7 +70,7 @@ macro_rules! to_cstring {
     };
 }
 
-/// Converts a CString to a normal string
+/// Converts a CString to a normal string.
 macro_rules! to_string {
     ($string: expr) => {
         String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned()
@@ -200,6 +201,20 @@ impl Server {
                     (id.0, property as size_t, &mut number));
             match res {
                 Error::Ok => Ok(number as i32),
+                _ => Err(res)
+            }
+        }
+    }
+
+    /// Get a server property that is stored as an int.
+    fn get_property_as_uint64(id: ServerId, property: VirtualServerProperties) -> Result<u64, Error> {
+        unsafe {
+            let mut number: u64 = 0;
+            let res: Error = transmute((ts3functions.as_ref()
+                .expect("Functions should be loaded").get_server_variable_as_uint64)
+                    (id.0, property as size_t, &mut number));
+            match res {
+                Error::Ok => Ok(number),
                 _ => Err(res)
             }
         }
@@ -416,7 +431,7 @@ impl Channel {
         }
     }
 
-    /// Get the parent channel id of a channel.
+    /// Ask the TeamSpeak api about the parent channel id of a channel.
     fn query_parent_channel_id(server_id: ServerId, id: ChannelId) -> Result<ChannelId, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -524,7 +539,7 @@ impl Connection {
         }
     }
 
-    /// Get the current channel id of a connection.
+    /// Ask the TeamSpeak api about the current channel id of a connection.
     fn query_channel_id(server_id: ServerId, id: ConnectionId) -> Result<ChannelId, Error> {
         unsafe {
             let mut number: u64 = 0;
@@ -538,7 +553,7 @@ impl Connection {
         }
     }
 
-    /// Returns true if the connection is currently whispering to us.
+    /// Ask the TeamSpeak api, if the specified connection is currently whispering to our own client.
     fn query_whispering(server_id: ServerId, id: ConnectionId) -> Result<bool, Error> {
         unsafe {
             let mut number: c_int = 0;
@@ -552,7 +567,7 @@ impl Connection {
         }
     }
 
-    /// Send a message to this connection.
+    /// Send a private message to this connection.
     pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
         unsafe {
             let text = to_cstring!(message.as_ref());
@@ -652,6 +667,8 @@ impl TsApi {
 
     // ********** Private Interface **********
 
+    /// Add the server with the specified id to the server list.
+    /// The currently available data of this server will be stored.
     fn add_server(&mut self, server_id: ServerId) -> &mut Server {
         self.servers.insert(server_id, Server::new(server_id));
         let mut server = self.servers.get_mut(&server_id).unwrap();
@@ -679,6 +696,9 @@ impl TsApi {
         }
     }
 
+    /// A reusable function that takes a TeamSpeak3 api function like `get_plugin_path`
+    /// and returns the path.
+    /// The buffer that holds the path will be automatically enlarged.
     fn get_path(fun: extern fn(path: *mut c_char, max_len: size_t)) -> String {
         const START_SIZE: usize = 512;
         const MAX_SIZE: usize = 1000000;
@@ -686,11 +706,14 @@ impl TsApi {
         loop {
             let mut buf = vec![0 as u8; size];
             fun(buf.as_mut_ptr() as *mut c_char, size - 1);
-            let s = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) };
-            let result = s.to_string_lossy();
-            if result.len() >= (size - 2)  && size < MAX_SIZE {
+            // Test if the allocated buffer was long enough
+            if buf[size - 3] != 0 {
                 size *= 2;
             } else {
+                // Be sure that the string is terminated
+                buf[size - 1] = 0;
+                let s = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) };
+                let result = s.to_string_lossy();
                 return result.into_owned();
             }
         }
@@ -709,7 +732,7 @@ impl TsApi {
     }
 
     /// Log a message using the TeamSpeak logging API.
-    /// If that fails, print the message.
+    /// If that fails, print the message to stdout.
     pub fn log_or_print<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) {
         TsApi::static_log_or_print(message, channel, severity)
     }
@@ -736,24 +759,29 @@ impl TsApi {
         }
     }
 
+    /// Get the application path of the TeamSpeak executable.
     pub fn get_app_path(&self) -> String {
         unsafe {
             TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_app_path)
         }
     }
 
+    /// Get the resource path of TeamSpeak.
     pub fn get_resources_path(&self) -> String {
         unsafe {
             TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_resources_path)
         }
     }
 
+    /// Get the path, where configuration files are stored.
+    /// This is e.g. `~/.ts3client` on linux or `%AppData%/TS3Client` on Windows.
     pub fn get_config_path(&self) -> String {
         unsafe {
             TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_config_path)
         }
     }
 
+    /// Get the path where TeamSpeak plugins are stored.
     pub fn get_plugin_path(&self) -> String {
         unsafe {
             TsApi::get_path(ts3functions.as_ref().expect("Functions should be loaded").get_plugin_path)

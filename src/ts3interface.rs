@@ -1,4 +1,4 @@
-use libc::{c_char, c_int, c_short, c_uint};
+use std::os::raw::{c_char, c_int, c_short, c_uint};
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::mem::transmute;
@@ -148,16 +148,21 @@ pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(server_id: u64,
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
     invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char) {
+    (::ts3functions.as_ref().unwrap().request_connection_info)(server_id, invoker_id, 0 as *const c_char);
     let server_id = ::ServerId(server_id);
-    let invoker_id = ::ConnectionId(invoker_id);
-    let invoker_name = to_string!(invoker_name);
-    let invoker_uid = to_string!(invoker_uid);
-    let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
+    let invoker = if invoker_id == 0 {
+        None
+    } else {
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+    };
     let data = DATA.lock().unwrap();
     let mut data = data.borrow_mut();
     let mut data = data.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
+    if let Some(ref invoker) = invoker {
+        api.try_update_invoker(server_id, invoker);
+    }
     plugin.server_edited(api, server_id, invoker);
 }
 
@@ -185,6 +190,7 @@ pub unsafe extern "C" fn ts3plugin_onConnectionInfoEvent(server_id: u64, connect
     let mut data = data.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
+    println!("Line: {}", line!());
     plugin.connection_info(api, server_id, connection_id);
 }
 
@@ -487,16 +493,19 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(server_id: u64,
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
     //let parent_channel_id = ::ChannelId(parent_channel_id);
-    let invoker_id = ::ConnectionId(invoker_id);
-    let invoker_name = to_string!(invoker_name);
-    let invoker_uid = to_string!(invoker_uid);
-    let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
+    let invoker = if invoker_id == 0 {
+        None
+    } else {
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+    };
     let data = DATA.lock().unwrap();
     let mut data = data.borrow_mut();
     let mut data = data.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
-    api.try_update_invoker(server_id, &invoker);
+    if let Some(ref invoker) = invoker {
+        api.try_update_invoker(server_id, invoker);
+    }
     if let Err(error) = api.get_mut_server(server_id).unwrap()
         .add_channel(channel_id) {
         error!(api, "Can't get channel information", error);
@@ -512,16 +521,19 @@ pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(server_id: u64,
     invoker_uid: *const c_char) {
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
-    let invoker_id = ::ConnectionId(invoker_id);
-    let invoker_name = to_string!(invoker_name);
-    let invoker_uid = to_string!(invoker_uid);
-    let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
+    let invoker = if invoker_id == 0 {
+        None
+    } else {
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+    };
     let data = DATA.lock().unwrap();
     let mut data = data.borrow_mut();
     let mut data = data.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
-    api.try_update_invoker(server_id, &invoker);
+    if let Some(ref invoker) = invoker {
+        api.try_update_invoker(server_id, invoker);
+    }
     plugin.channel_deleted(api, server_id, channel_id, invoker);
     if api.get_mut_server(server_id).and_then(|s| s.remove_channel(channel_id)).is_none() {
         api.log_or_print("Can't remove channel", "rust-ts3plugin", ::LogLevel::Error);
@@ -594,16 +606,19 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
     let new_parent_channel_id = ::ChannelId(new_parent_channel_id);
-    let invoker_id = ::ConnectionId(invoker_id);
-    let invoker_name = to_string!(invoker_name);
-    let invoker_uid = to_string!(invoker_uid);
-    let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
+    let invoker = if invoker_id == 0 {
+        None
+    } else {
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+    };
     let data = DATA.lock().unwrap();
     let mut data = data.borrow_mut();
     let mut data = data.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
-    api.try_update_invoker(server_id, &invoker);
+    if let Some(ref invoker) = invoker {
+        api.try_update_invoker(server_id, invoker);
+    }
     plugin.channel_moved(api, server_id, channel_id, new_parent_channel_id, invoker);
     if let Some(channel) = api.get_mut_server(server_id).and_then(|s| s.get_mut_channel(channel_id)) {
         channel.parent_channel_id = Ok(new_parent_channel_id);
