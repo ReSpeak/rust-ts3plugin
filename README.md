@@ -1,20 +1,17 @@
-TeamSpeak3 Plugin API
+TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/Flakebi/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/Flakebi/rust-ts3plugin) [![Latest version](https://img.shields.io/crates/v/ts3plugin.svg)](https://crates.io/crates/ts3plugin)
 =====================
-[![Build Status](https://travis-ci.org/Flakebi/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/Flakebi/rust-ts3plugin)
+The documentation can be found here: [![At docs.rs](https://docs.rs/ts3plugin/badge.svg)](https://docs.rs/ts3plugin)
 
-The documentation can be found [on GitHub-Pages](https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/).
-
-Even if this library is already used in some projects, it should not be
-considered stable and breaking changes will happen.
+Breaking changes will happen from time to time, leading to a minor version bump.
 
 At the moment, not all methods that are exposed by the TeamSpeak API are
-available for plugins. If a method that you need is missing please file an issue
-or open a pull request.
+available for plugins. If a method that you need is missing, please file an
+issue or open a pull request.
 
 Usage
 -----
 Add the following to your `Cargo.toml`:
-```
+```toml
 [lib]
 name = "<pluginname>"
 crate-type = ["cdylib"]

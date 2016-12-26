@@ -719,6 +719,14 @@ impl TsApi {
 
 	// ********** Public Interface **********
 
+	/// Get the raw TeamSpeak api functions.
+	/// These functions can be used to invoke actions that are not yet
+	/// implemented by this library. You should file a bug report or make a pull
+	/// request if you need to use this function.
+	pub unsafe fn get_raw_api(&self) -> &Ts3Functions {
+		TS3_FUNCTIONS.as_ref().unwrap()
+	}
+
 	/// Get all server ids to which this client is currently connected.
 	pub fn get_server_ids(&self) -> Vec<ServerId> {
 		self.servers.keys().cloned().collect()
