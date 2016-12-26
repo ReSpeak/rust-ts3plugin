@@ -64,7 +64,7 @@ pub extern "C" fn ts3plugin_apiVersion() -> c_int {
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
-    ::ts3functions = Some(funs);
+    ::TS3_FUNCTIONS = Some(funs);
 }
 
 /// Called when the plugin should be unloaded.
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(server_id: u64,
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
     invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char) {
-    (::ts3functions.as_ref().unwrap().request_connection_info)(server_id, invoker_id, 0 as *const c_char);
+    (::TS3_FUNCTIONS.as_ref().unwrap().request_connection_info)(server_id, invoker_id, 0 as *const c_char);
     let server_id = ::ServerId(server_id);
     let invoker = if invoker_id == 0 {
         None

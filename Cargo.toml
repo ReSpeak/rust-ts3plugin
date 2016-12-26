@@ -7,9 +7,9 @@ An abstraction layer that simplifies creating TeamSpeak3 plugins
 and stores received data to provide a more convenient API.
 """
 repository = "https://github.com/Flakebi/rust-ts3plugin"
-documentation = "https://flakebi.github.io/rust-ts3plugin/doc/ts3plugin/"
+documentation = "https://docs.rs/ts3plugin"
 readme = "README.md"
-keywords = ["plugin", "TeamSpeak3"]
+keywords = ["plugin", "TeamSpeak3", "TS3"]
 license = "MIT/Apache-2.0"
 build = "src/build.rs"
 
@@ -31,8 +31,3 @@ skeptic = "0.6"
 [dev-dependencies]
 lazy_static = "0.2"
 skeptic = "0.6"
-
-# Use `cargo build --features "clippy"` to see style lints
-[dependencies.clippy]
-version = "0"
-optional = true
