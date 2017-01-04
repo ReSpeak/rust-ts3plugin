@@ -2,6 +2,10 @@ TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/Flakebi/rust
 =====================
 The documentation can be found here: [![At docs.rs](https://docs.rs/ts3plugin/badge.svg)](https://docs.rs/ts3plugin)
 
+TeamSpeak 3.1 updates the plugin api version from 20 to 21.  
+Version 0.2 and above are compatible with this version while version 0.1 is
+compatible with the api version 20.
+
 Breaking changes will happen from time to time, leading to a minor version bump.
 
 At the moment, not all methods that are exposed by the TeamSpeak API are
@@ -18,7 +22,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 lazy_static = "0.2"
-ts3plugin = "0.1"
+ts3plugin = "0.2"
 ```
 
 This code can be used to make your library a TeamSpeak plugin:

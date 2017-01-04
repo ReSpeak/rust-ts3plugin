@@ -1,6 +1,6 @@
 [package]
 name = "ts3plugin"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Flakebi <flakebi@t-online.de>"]
 description = """
 An abstraction layer that simplifies creating TeamSpeak3 plugins
@@ -21,7 +21,7 @@ default = []
 
 [dependencies]
 chrono = "0.2"
-ts3plugin-sys = "0.2"
+ts3plugin-sys = "0.3"
 lazy_static = "0.2"
 
 # For tests
@@ -29,5 +29,4 @@ lazy_static = "0.2"
 skeptic = "0.6"
 
 [dev-dependencies]
-lazy_static = "0.2"
 skeptic = "0.6"

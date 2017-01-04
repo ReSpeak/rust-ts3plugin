@@ -57,7 +57,7 @@ pub unsafe fn private_init<T: Plugin>() -> Result<(), ::InitError> {
 #[no_mangle]
 #[doc(hidden)]
 pub extern "C" fn ts3plugin_apiVersion() -> c_int {
-    20
+    21
 }
 
 #[allow(non_snake_case)]
@@ -81,6 +81,20 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
     }
     // Drop the api and the plugin
     *data = None;
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn ts3plugin_registerPluginID(plugin_id: *const c_char) {
+    let data = DATA.lock().unwrap();
+    let mut data = data.borrow_mut();
+    let mut data = data.as_mut().unwrap();
+    let mut api = &mut data.0;
+    let mut plugin = &mut data.1;
+    api.plugin_id = Some(to_string!(plugin_id));
+    // Notify the client of the plugin id
+    plugin.plugin_id_available(api);
 }
 
 #[allow(non_snake_case)]

@@ -54,7 +54,7 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
-use std::collections::BTreeMap as Map;
+use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
 use std::os::raw::{c_char, c_int};
@@ -85,7 +85,10 @@ include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 // ******************** Structs ********************
 /// The main struct that contains all permanently save data.
 pub struct TsApi {
+	/// All known servers.
 	servers: Map<ServerId, Server>,
+	/// The plugin id from TeamSpeak.
+	plugin_id: Option<String>,
 }
 
 /// A struct for convenience. The invoker is maybe not visible to the user,
@@ -112,24 +115,24 @@ pub enum MessageReceiver {
 pub struct Permissions;
 
 /// A wrapper for a server id.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ServerId(u64);
 
 /// A wrapper for a channel id.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ChannelId(u64);
 
 /// A wrapper for a connection id.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ConnectionId(u16);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct PermissionId(u32);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ServerGroupId(u64);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ChannelGroupId(u64);
 
 
@@ -587,19 +590,17 @@ static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
 
 // Don't provide a default Implementation because we don't want the TsApi
 // to be publicly constructable.
-#[cfg_attr(feature="clippy", allow(new_without_default))]
 impl TsApi {
 	/// Create a new TsApi instance without loading anything.
-	/// This will be called from the `create_plugin!` macro.
-	/// This function is not meant for public use.
 	fn new() -> TsApi {
 		TsApi {
 			servers: Map::new(),
+			plugin_id: None,
 		}
 	}
 
 	/// Load all currently connected server and their data.
-	/// This should normally be executed after `new()`
+	/// This should normally be executed after `new()`.
 	fn load(&mut self) -> Result<(), Error> {
 		// Query available connections
 		let mut result: *mut u64 = std::ptr::null_mut();
@@ -694,10 +695,13 @@ impl TsApi {
 		}
 	}
 
-	/// A reusable function that takes a TeamSpeak3 api function like `get_plugin_path`
-	/// and returns the path.
-	/// The buffer that holds the path will be automatically enlarged.
-	fn get_path(fun: extern fn(path: *mut c_char, max_len: usize)) -> String {
+	/// A reusable function that takes a TeamSpeak3 api function like
+	/// `get_plugin_path` and returns the path.
+	/// The buffer that holds the path will be automatically enlarged up to a
+	/// limit.
+	/// The function that is colled takes a pointer to a string buffer that will
+	/// be filled and the max lenght of the buffer.
+	fn get_path<F: Fn(*mut c_char, usize)>(fun: F) -> String {
 		const START_SIZE: usize = 512;
 		const MAX_SIZE: usize = 1000000;
 		let mut size = START_SIZE;
@@ -725,6 +729,14 @@ impl TsApi {
 	/// request if you need to use this function.
 	pub unsafe fn get_raw_api(&self) -> &Ts3Functions {
 		TS3_FUNCTIONS.as_ref().unwrap()
+	}
+
+	/// Get the plugin id assigned by TeamSpeak.
+	/// The id is available after [`Plugin::plugin_id_available`] is called.
+	///
+	/// [`Plugin::plugin_id_available`]: plugin/trait.Plugin.html#method.plugin_id_available
+	pub fn get_plugin_id(&self) -> Option<&str> {
+		self.plugin_id.as_ref().map(String::as_str)
 	}
 
 	/// Get all server ids to which this client is currently connected.
@@ -768,14 +780,14 @@ impl TsApi {
 	/// Get the application path of the TeamSpeak executable.
 	pub fn get_app_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_app_path)
+			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_app_path)(p, l))
 		}
 	}
 
 	/// Get the resource path of TeamSpeak.
 	pub fn get_resources_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_resources_path)
+			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_resources_path)(p, l))
 		}
 	}
 
@@ -783,14 +795,22 @@ impl TsApi {
 	/// This is e.g. `~/.ts3client` on linux or `%AppData%/TS3Client` on Windows.
 	pub fn get_config_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_config_path)
+			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_config_path)(p, l))
 		}
 	}
 
 	/// Get the path where TeamSpeak plugins are stored.
-	pub fn get_plugin_path(&self) -> String {
-		unsafe {
-			TsApi::get_path(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_plugin_path)
-		}
+	/// Beware that this function needs the plugin id to be set which will not
+	/// be the case when a plugin is created.
+	/// After [`Plugin::new`] is called, [`Plugin::plugin_id_available`]
+	/// will be called when the plugin id is set.
+	///
+	/// [`Plugin::new`]: plugin/trait.Plugin.html#tymethod.new
+	/// [`Plugin::plugin_id_available`]: plugin/trait.Plugin.html#method.plugin_id_available
+	pub fn get_plugin_path(&self) -> Option<String> {
+		self.plugin_id.as_ref().map(|id| unsafe {
+			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_plugin_path)(p, l,
+				to_cstring!(id.as_str()).as_ptr()))
+		})
 	}
 }
