@@ -73,8 +73,7 @@ pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
 pub unsafe extern "C" fn ts3plugin_shutdown() {
     let data = DATA.lock().unwrap();
     let mut data = data.borrow_mut();
-    {
-        let mut data = data.as_mut().unwrap();
+    if let Some(mut data) = data.as_mut() {
         let mut api = &mut data.0;
         let mut plugin = &mut data.1;
         plugin.shutdown(api);
