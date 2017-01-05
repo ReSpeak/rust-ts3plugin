@@ -88,7 +88,7 @@ pub struct TsApi {
 	/// All known servers.
 	servers: Map<ServerId, Server>,
 	/// The plugin id from TeamSpeak.
-	plugin_id: Option<String>,
+	plugin_id: String,
 }
 
 /// A struct for convenience. The invoker is maybe not visible to the user,
@@ -592,10 +592,10 @@ static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
 // to be publicly constructable.
 impl TsApi {
 	/// Create a new TsApi instance without loading anything.
-	fn new() -> TsApi {
+	fn new(plugin_id: String) -> TsApi {
 		TsApi {
 			servers: Map::new(),
-			plugin_id: None,
+			plugin_id: plugin_id,
 		}
 	}
 
@@ -732,11 +732,8 @@ impl TsApi {
 	}
 
 	/// Get the plugin id assigned by TeamSpeak.
-	/// The id is available after [`Plugin::plugin_id_available`] is called.
-	///
-	/// [`Plugin::plugin_id_available`]: plugin/trait.Plugin.html#method.plugin_id_available
-	pub fn get_plugin_id(&self) -> Option<&str> {
-		self.plugin_id.as_ref().map(String::as_str)
+	pub fn get_plugin_id(&self) -> &str {
+		&self.plugin_id
 	}
 
 	/// Get all server ids to which this client is currently connected.
@@ -800,17 +797,11 @@ impl TsApi {
 	}
 
 	/// Get the path where TeamSpeak plugins are stored.
-	/// Beware that this function needs the plugin id to be set which will not
-	/// be the case when a plugin is created.
-	/// After [`Plugin::new`] is called, [`Plugin::plugin_id_available`]
-	/// will be called when the plugin id is set.
-	///
-	/// [`Plugin::new`]: plugin/trait.Plugin.html#tymethod.new
-	/// [`Plugin::plugin_id_available`]: plugin/trait.Plugin.html#method.plugin_id_available
-	pub fn get_plugin_path(&self) -> Option<String> {
-		self.plugin_id.as_ref().map(|id| unsafe {
-			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_plugin_path)(p, l,
-				to_cstring!(id.as_str()).as_ptr()))
-		})
+	pub fn get_plugin_path(&self) -> String {
+		unsafe {
+			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref()
+				.expect("Functions should be loaded").get_plugin_path)(p, l,
+				to_cstring!(self.plugin_id.as_str()).as_ptr()))
+		}
 	}
 }

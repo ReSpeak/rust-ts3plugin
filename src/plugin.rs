@@ -24,17 +24,10 @@ pub trait Plugin: 'static + Send {
 	fn new(api: &mut ::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
 
 	// *************************** Optional methods ****************************
-	/// Called after the plugin was created when the plugin id is received.
-	/// Use [`api.get_plugin_id()`] to get the plugin id.
-	///
-	/// [`api.get_plugin_id()`]: ../struct.TsApi.html#method.get_plugin_id
-	fn plugin_id_available(&mut self, api: &mut ::TsApi) {}
-
 	/// If the connection status changes.
-	/// If `status = `[`ConnectStatus::Connecting`], the connection_id is not yet
+	/// If `status = ConnectStatus::Connecting`, the connection_id is not yet
 	/// registered in the [`TsApi`].
 	///
-	/// [`ConnectStatus::Connecting`]: ../../ts3plugin_sys/clientlib_publicdefinitions/enum.ConnectStatus.html
 	/// [`TsApi`]: ../struct.TsApi.html
 	fn connect_status_change(&mut self, api: &mut ::TsApi, server_id: ::ServerId, status:
 		::ConnectStatus, error: ::Error) {}
