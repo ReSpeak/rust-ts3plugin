@@ -10,8 +10,12 @@ repository = "https://github.com/Flakebi/rust-ts3plugin"
 documentation = "https://docs.rs/ts3plugin"
 readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
+categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
 build = "src/build.rs"
+
+[badges]
+travis-ci = { repository = "Flakebi/rust-ts3plugin" }
 
 [lib]
 name = "ts3plugin"
