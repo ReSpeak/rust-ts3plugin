@@ -1,5 +1,4 @@
 use std::os::raw::{c_char, c_int, c_short, c_uint};
-use std::cell::RefCell;
 use std::ffi::CStr;
 use std::mem::transmute;
 use std::slice;
@@ -12,8 +11,8 @@ use ::plugin::Plugin;
 
 lazy_static! {
     /// The api, plugin and plugin id
-    static ref DATA: Mutex<RefCell<(Option<(::TsApi, Box<Plugin>)>, Option<String>)>> =
-        Mutex::new(RefCell::new((None, None)));
+    static ref DATA: Mutex<(Option<(::TsApi, Box<Plugin>)>, Option<String>)> =
+        Mutex::new((None, None));
 }
 
 /// Get the current file without the preceding path
@@ -39,8 +38,8 @@ macro_rules! error {
 pub unsafe fn private_init<T: Plugin>() -> Result<(), ::InitError> {
     // Create the TsApi
     let plugin_id = {
-        let data = DATA.lock().unwrap();
-        let s = data.borrow_mut().1.take().unwrap();
+        let mut data = DATA.lock().unwrap();
+        let s = data.1.take().unwrap();
         s
     };
     let mut api = ::TsApi::new(plugin_id);
@@ -52,8 +51,8 @@ pub unsafe fn private_init<T: Plugin>() -> Result<(), ::InitError> {
     // Create the plugin
     match T::new(&mut api) {
         Ok(plugin) => {
-            let data = DATA.lock().unwrap();
-            data.borrow_mut().0 = Some((api, plugin));
+            let mut data = DATA.lock().unwrap();
+            data.0 = Some((api, plugin));
             Ok(())
         }
         Err(error) => Err(error),
@@ -80,8 +79,7 @@ pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_shutdown() {
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     if let Some(mut data) = data.0.as_mut() {
         let mut api = &mut data.0;
         let mut plugin = &mut data.1;
@@ -95,8 +93,7 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_registerPluginID(plugin_id: *const c_char) {
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     data.1 = Some(to_string!(plugin_id));
 }
 
@@ -108,8 +105,7 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
     let server_id = ::ServerId(server_id);
     let status = transmute(status);
     let error = transmute(error);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -132,8 +128,7 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(server_id: u64,
 pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *const c_char) {
     let server_id = ::ServerId(server_id);
     let message = to_string!(message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -151,8 +146,7 @@ pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(server_id: u64,
     let error = transmute(error);
     let return_code = to_string!(return_code);
     let extra_message = to_string!(extra_message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -172,8 +166,7 @@ pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
     } else {
         Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
     };
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -188,8 +181,7 @@ pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerConnectionInfoEvent(server_id: u64) {
     let server_id = ::ServerId(server_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -202,8 +194,7 @@ pub unsafe extern "C" fn ts3plugin_onServerConnectionInfoEvent(server_id: u64) {
 pub unsafe extern "C" fn ts3plugin_onConnectionInfoEvent(server_id: u64, connection_id: u16) {
     let server_id = ::ServerId(server_id);
     let connection_id = ::ConnectionId(connection_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -223,8 +214,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
     let invoker_name = to_string!(invoker_name);
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -256,8 +246,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(server_id: u64, connection_
     let new_channel_id = ::ChannelId(new_channel_id);
     let visibility = transmute(visibility);
     let move_message = to_string!(move_message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -320,8 +309,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(server_id: u64, connec
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let move_message = to_string!(move_message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -380,8 +368,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(server_id: u64,
     //let old_channel_id = ::ChannelId(old_channel_id);
     //let new_channel_id = ::ChannelId(new_channel_id);
     let visibility = transmute(visibility);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -411,8 +398,7 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(server_id: u64,
     //let new_channel_id = ::ChannelId(new_channel_id);
     //let visibility = transmute(visibility);
     let timeout_message = to_string!(timeout_message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -428,8 +414,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(server_id: u64, channel_id:
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
     //let parent_channel_id = ::ChannelId(parent_channel_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -447,8 +432,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u6
     channel_id: u64) {
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -473,8 +457,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64,
     channel_id: u64) {
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -515,8 +498,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(server_id: u64,
     } else {
         Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
     };
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -543,8 +525,7 @@ pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(server_id: u64,
     } else {
         Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
     };
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -569,8 +550,7 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(server_id: u64,
     let invoker_name = to_string!(invoker_name);
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -606,8 +586,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelPasswordChangedEvent(server_id: u64,
     channel_id: u64) {
     let server_id = ::ServerId(server_id);
     let channel_id = ::ChannelId(channel_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -628,8 +607,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
     } else {
         Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
     };
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -659,8 +637,7 @@ pub unsafe extern "C" fn ts3plugin_onTextMessageEvent(server_id: u64,
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let message = to_string!(message);
     let ignored = ignored != 0;
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -696,8 +673,7 @@ pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(server_id: u64,
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let message = to_string!(message);
     let ignored = ignored != 0;
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -727,8 +703,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(server_id: u64,
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let message = to_string!(message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -763,8 +738,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(server_id: u64,
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let message = to_string!(message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -792,8 +766,7 @@ pub unsafe extern "C" fn ts3plugin_onClientBanFromServerEvent(server_id: u64,
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
     let message = to_string!(message);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -812,8 +785,7 @@ pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(server_id: u64,
     let talking = transmute(talking);
     let whispering = whispering != 0;
     let connection_id = ::ConnectionId(connection_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -834,8 +806,7 @@ pub unsafe extern "C" fn ts3plugin_onAvatarUpdated(server_id: u64,
     let server_id = ::ServerId(server_id);
     let connection_id = ::ConnectionId(connection_id);
     let path = if avatar_path.is_null() { None } else { Some(to_string!(avatar_path)) };
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -855,8 +826,7 @@ pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(server_id: u
     let invoker_name = to_string!(invoker_name);
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -883,8 +853,7 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(server_id: u64,
     let invoker_name = to_string!(invoker_name);
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -911,8 +880,7 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientDeletedEvent(server_id: u6
     let invoker_name = to_string!(invoker_name);
     let invoker_uid = to_string!(invoker_uid);
     let invoker = ::Invoker::new(invoker_id, invoker_uid, invoker_name);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -932,8 +900,7 @@ pub unsafe extern "C" fn ts3plugin_onServerPermissionErrorEvent(server_id: u64,
     let error = transmute(error);
     let return_code = to_string!(return_code);
     let permission_id = ::PermissionId(permission_id);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -953,8 +920,7 @@ pub unsafe extern "C" fn ts3plugin_onEditPlaybackVoiceDataEvent(server_id: u64,
     let server_id = ::ServerId(server_id);
     let connection_id = ::ConnectionId(connection_id);
     let mut samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -973,8 +939,7 @@ pub unsafe extern "C" fn ts3plugin_onEditPostProcessVoiceDataEvent(server_id: u6
     let channel_speaker_array = slice::from_raw_parts(channel_speaker_array as *mut ::Speaker,
         channels as usize);
     let channel_fill_mask = channel_fill_mask.as_mut().unwrap();
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -993,8 +958,7 @@ pub unsafe extern "C" fn ts3plugin_onEditMixedPlaybackVoiceDataEvent(server_id: 
     let channel_speaker_array = slice::from_raw_parts(channel_speaker_array as *mut ::Speaker,
         channels as usize);
     let channel_fill_mask = channel_fill_mask.as_mut().unwrap();
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
@@ -1010,8 +974,7 @@ pub unsafe extern "C" fn ts3plugin_onEditCapturedVoiceDataEvent(server_id: u64,
     let server_id = ::ServerId(server_id);
     let mut samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
     let mut send = (*edited & 2) != 0;
-    let data = DATA.lock().unwrap();
-    let mut data = data.borrow_mut();
+    let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
     let mut api = &mut data.0;
     let mut plugin = &mut data.1;
