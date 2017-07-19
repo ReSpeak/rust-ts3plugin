@@ -973,7 +973,7 @@ fn indent<S: AsRef<str>>(s: S, count: usize) -> String {
 	let mut result = String::with_capacity(sref.len() + line_count * count * 4);
 	for l in sref.lines() {
 		if !l.is_empty() {
-			result.push_str(std::iter::repeat("    ").take(count).collect::<String>().as_str());
+			result.push_str(std::iter::repeat("\t").take(count).collect::<String>().as_str());
 		}
 		result.push_str(l);
 		result.push('\n');

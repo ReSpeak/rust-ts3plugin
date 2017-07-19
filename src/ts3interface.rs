@@ -164,7 +164,7 @@ pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(server_id: u64,
     let invoker = if invoker_id == 0 {
         None
     } else {
-        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid), to_string!(invoker_name)))
     };
     let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
@@ -496,7 +496,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(server_id: u64,
     let invoker = if invoker_id == 0 {
         None
     } else {
-        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid), to_string!(invoker_name)))
     };
     let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
@@ -523,7 +523,7 @@ pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(server_id: u64,
     let invoker = if invoker_id == 0 {
         None
     } else {
-        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid), to_string!(invoker_name)))
     };
     let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
@@ -605,7 +605,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(server_id: u64,
     let invoker = if invoker_id == 0 {
         None
     } else {
-        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_name), to_string!(invoker_uid)))
+        Some(::Invoker::new(::ConnectionId(invoker_id), to_string!(invoker_uid), to_string!(invoker_name)))
     };
     let mut data = DATA.lock().unwrap();
     let mut data = data.0.as_mut().unwrap();
