@@ -21,22 +21,28 @@ name = "<pluginname>"
 crate-type = ["cdylib"]
 
 [dependencies]
-lazy_static = "0.2"
-ts3plugin = "0.2"
+ts3plugin = "0.3"
 ```
 
 This code can be used to make your library a TeamSpeak plugin:
 ```rust,no-run
 #[macro_use]
 extern crate ts3plugin;
-#[macro_use]
-extern crate lazy_static;
 
 use ts3plugin::*;
 
 struct MyTsPlugin;
 
 impl Plugin for MyTsPlugin {
+    fn name()        -> String { String::from("My Ts Plugin") }
+    fn version()     -> String { String::from("0.1.0") }
+    fn author()      -> String { String::from("My Name") }
+    fn description() -> String { String::from("A wonderful tiny example plugin") }
+    // Optional
+    fn command() -> Option<String> { Some(String::from("myplugin")) }
+    fn autoload() -> bool { false }
+    fn configurable() -> ConfigureOffer { ConfigureOffer::No }
+
     fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
         Ok(Box::new(MyTsPlugin))
@@ -50,9 +56,7 @@ impl Plugin for MyTsPlugin {
     }
 }
 
-create_plugin!(
-    "My Ts Plugin", "0.1.0", "My name", "A wonderful tiny example plugin",
-    ConfigureOffer::No, false, MyTsPlugin);
+create_plugin!(MyTsPlugin);
 ```
 
 Projects using this library

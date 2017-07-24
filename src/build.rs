@@ -214,6 +214,7 @@ struct PropertyBuilder<'a> {
 	default_args_update: Cow<'a, str>,
 }
 
+#[allow(dead_code)]
 impl<'a> PropertyBuilder<'a> {
 	fn new() -> PropertyBuilder<'a> {
 		let mut result = Self::default();

@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 #[derive(Debug)]
 pub enum InitError {
 	/// Initialisation failed, the plugin will be unloaded again
@@ -19,6 +21,26 @@ pub enum InitError {
 /// [`create_plugin!`]: ../macro.create_plugin.html
 #[allow(unused_variables, unknown_lints, too_many_arguments)]
 pub trait Plugin: 'static + Send {
+	// ************************* Configuration methods *************************
+	/// The name of the plugin as displayed in TeamSpeak.
+	fn name() -> String where Self: Sized;
+	/// The version of the plugin as displayed in TeamSpeak.
+	fn version() -> String where Self: Sized;
+	/// The author of the plugin as displayed in TeamSpeak.
+	fn author() -> String where Self: Sized;
+	/// The description of the plugin as displayed in TeamSpeak.
+	fn description() -> String where Self: Sized;
+	/// The command prefix that can be used by users in the chat, defaults to `None`.
+	fn command() -> Option<String> where Self: Sized { None }
+	/// If the plugin offers the possibility to be configured, defaults to
+	/// [`ConfigureOffer::No`].
+	///
+	/// [`ConfigureOffer::No`]: ../ts3plugin_sys/plugin_definitions/enum.ConfigureOffer.html
+	fn configurable() -> ::ConfigureOffer where Self: Sized { ::ConfigureOffer::No }
+	/// If the plugin should be loaded by default or only if activated manually,
+	/// defaults to `false`.
+	fn autoload() -> bool where Self: Sized { false }
+
 	// *************************** Required methods ****************************
 	/// Called when the plugin is loaded by TeamSpeak.
 	fn new(api: &mut ::TsApi) -> Result<Box<Self>, InitError> where Self: Sized;
@@ -216,6 +238,7 @@ pub trait Plugin: 'static + Send {
 		channel_fill_mask: &mut u32) {}
 
 	/// The recorded sound from the current capture device.
+	///
 	/// `send` is set if the audio data will be send to the server. This attribute
 	/// can be changed in this callback.
 	/// The return value of this function describes if the sound data was altered.
@@ -231,47 +254,72 @@ pub trait Plugin: 'static + Send {
 		permission_id: ::PermissionId, error: ::Error, message: String,
 		return_code: String) -> bool { false }
 
+	/// Called when a message from another plugin is received.
+	///
+	/// Messages can be sent with [`Server::send_plugin_message`].
+	/// The message is called `PluginCommand` by TeamSpeak.
+	///
+	/// [`Server::send_plugin_message`]: ../struct.Server.html#method.send_plugin_message
+	fn plugin_message(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+		plugin: String, message: String) { }
+
+	/// Called when the user enters a command in the chat box.
+	///
+	/// Commands that are prefixed with the string, which is specified in
+	/// [`Plugin::command`], are redirected to this function.
+	/// The command prefix is not contained in the given argument.
+	///
+	/// Return `true` if this function handled the command or `false` if not.
+	///
+	/// [`Plugin::command`]: #method.command
+	fn process_command(&mut self, api: &mut ::TsApi, server_id: ::ServerId,
+		command: String) -> bool { false }
+
 	/// Called if the plugin is getting disabled (either by the user or if
 	/// TeamSpeak is exiting).
 	fn shutdown(&mut self, api: &mut ::TsApi) {}
 }
 
-/// Create a plugin. This macro has to be called once per library to create the
-/// function interface that is used by TeamSpeak.
+/// Save the `CString`s that are returned from the TeamSpeak API.
+/// We don't want to return invalid pointers.
+#[doc(hidden)]
+pub struct CreatePluginData {
+	pub name: Option<::std::ffi::CString>,
+	pub version: Option<::std::ffi::CString>,
+	pub author: Option<::std::ffi::CString>,
+	pub description: Option<::std::ffi::CString>,
+	pub command: Option<Option<::std::ffi::CString>>,
+}
+
+lazy_static! {
+	#[doc(hidden)]
+	pub static ref CREATE_PLUGIN_DATA: Mutex<CreatePluginData> =
+		Mutex::new(CreatePluginData {
+			name: None,
+			version: None,
+			author: None,
+			description: None,
+			command: None,
+		});
+}
+
+/// Create a plugin.
 ///
-/// # Arguments
-///
-///  - name         - The name of the plugin as displayed in TeamSpeak
-///  - version      - The version of the plugin as displayed in TeamSpeak
-///  - author       - The author of the plugin as displayed in TeamSpeak
-///  - description  - The description of the plugin as displayed in TeamSpeak
-///  - configurable - If the plugin offers the possibility to be configured
-///  - autoload     - If the plugin should be loaded by default or only if
-///                   activated manually
-///  - typename     - The type of the class that implements the [`Plugin`] trait
+/// This macro has to be called once per library to create the
+/// function interface that is used by TeamSpeak. The argument is the struct
+/// which implements the [`Plugin`] trait.
 ///
 /// # Examples
 ///
-/// Create an example plugin with a given name, version, author, description and
-/// a struct `MyTsPlugin` that implements the [`Plugin`] trait:
-///
 /// ```ignore
-/// create_plugin!("My Ts Plugin", "0.1.0", "My Name",
-///     "A wonderful tiny example plugin", ConfigureOffer::No, false, MyTsPlugin);
+/// create_plugin!(MyTsPlugin);
 /// ```
 ///
 /// [`Plugin`]: plugin/trait.Plugin.html
 #[macro_export]
 macro_rules! create_plugin {
-	($name: expr, $version: expr, $author: expr, $description: expr,
-		$configurable: expr, $autoload: expr, $typename: ident) => {
-		lazy_static! {
-			static ref PLUGIN_NAME: std::ffi::CString = std::ffi::CString::new($name).unwrap();
-			static ref PLUGIN_VERSION: std::ffi::CString = std::ffi::CString::new($version).unwrap();
-			static ref PLUGIN_AUTHOR: std::ffi::CString = std::ffi::CString::new($author).unwrap();
-			static ref PLUGIN_DESCRIPTION: std::ffi::CString = std::ffi::CString::new($description).unwrap();
-		}
-
+	($typename: ident) => {
+		/// Initialise the plugin and return the error status.
 		#[no_mangle]
 		#[doc(hidden)]
 		pub unsafe extern "C" fn ts3plugin_init() -> std::os::raw::c_int {
@@ -288,7 +336,13 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_name() -> *const std::os::raw::c_char {
-			(*PLUGIN_NAME).as_ptr()
+			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
+			if data.name.is_none() {
+				let s = $typename::name();
+				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
+				data.name = Some(s);
+			}
+			data.name.as_ref().unwrap().as_ptr()
 		}
 
 		/// The version of the plugin.
@@ -296,7 +350,13 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_version() -> *const std::os::raw::c_char {
-			(*PLUGIN_VERSION).as_ptr()
+			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
+			if data.version.is_none() {
+				let s = $typename::version();
+				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
+				data.version = Some(s);
+			}
+			data.version.as_ref().unwrap().as_ptr()
 		}
 
 		/// The author of the plugin.
@@ -304,7 +364,13 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_author() -> *const std::os::raw::c_char {
-			(*PLUGIN_AUTHOR).as_ptr()
+			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
+			if data.author.is_none() {
+				let s = $typename::author();
+				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
+				data.author = Some(s);
+			}
+			data.author.as_ref().unwrap().as_ptr()
 		}
 
 		/// The desription of the plugin.
@@ -312,7 +378,35 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_description() -> *const std::os::raw::c_char {
-			(*PLUGIN_DESCRIPTION).as_ptr()
+			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
+			if data.description.is_none() {
+				let s = $typename::description();
+				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
+				data.description = Some(s);
+			}
+			data.description.as_ref().unwrap().as_ptr()
+		}
+
+		/// If the plugin offers the possibility to be configured by the user.
+		/// Can be called before init.
+		#[allow(non_snake_case)]
+		#[no_mangle]
+		#[doc(hidden)]
+		pub extern "C" fn ts3plugin_commandKeyword() -> *const std::os::raw::c_char {
+			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
+			if data.command.is_none() {
+				data.command = Some(if let Some(s) = $typename::command() {
+					let s = ::std::ffi::CString::new(s).expect("String contains nul character");
+					Some(s)
+				} else {
+					None
+				})
+			}
+			if let &Some(ref s) = data.command.as_ref().unwrap() {
+				s.as_ptr()
+			} else {
+				std::ptr::null()
+			}
 		}
 
 		/// If the plugin offers the possibility to be configured by the user.
@@ -321,7 +415,7 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_offersConfigure() -> std::os::raw::c_int {
-			$configurable as std::os::raw::c_int
+			$typename::configurable() as std::os::raw::c_int
 		}
 
 		/// If the plugin should be loaded automatically.
@@ -330,7 +424,7 @@ macro_rules! create_plugin {
 		#[no_mangle]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_requestAutoload() -> std::os::raw::c_int {
-			if $autoload {
+			if $typename::autoload() {
 				1
 			} else {
 				0

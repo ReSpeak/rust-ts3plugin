@@ -2,19 +2,26 @@
 //!
 //! # Example
 //!
-//! A fully working example that creates a plugin that does nothing:
+//! A fully working example, which creates a plugin that does nothing:
 //!
 //! ```
 //! #[macro_use]
 //! extern crate ts3plugin;
-//! #[macro_use]
-//! extern crate lazy_static;
 //!
 //! use ts3plugin::*;
 //!
 //! struct MyTsPlugin;
 //!
 //! impl Plugin for MyTsPlugin {
+//!     fn name()        -> String { String::from("My Ts Plugin") }
+//!     fn version()     -> String { String::from("0.1.0") }
+//!     fn author()      -> String { String::from("My Name") }
+//!     fn description() -> String { String::from("A wonderful tiny example plugin") }
+//!     // Optional
+//!     fn command() -> Option<String> { Some(String::from("myplugin")) }
+//!     fn autoload() -> bool { false }
+//!     fn configurable() -> ConfigureOffer { ConfigureOffer::No }
+//!
 //!     fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
 //!         Ok(Box::new(MyTsPlugin))
@@ -28,14 +35,10 @@
 //!     }
 //! }
 //!
-//! create_plugin!(
-//!     "My Ts Plugin", "0.1.0", "My name", "A wonderful tiny example plugin",
-//!     ConfigureOffer::No, false, MyTsPlugin);
+//! create_plugin!(MyTsPlugin);
 //!
 //! # fn main() { }
 //! ```
-//!
-//! You also need to add `lazy_static` to your crates dependencies.
 
 #![allow(dead_code)]
 #![cfg_attr(feature="clippy", feature(plugin))]
@@ -367,6 +370,22 @@ impl Server {
 				Error::Ok => Ok(()),
 				_ => Err(res)
 			}
+		}
+	}
+
+	/// Sends a plugin message to all connections on the server.
+	///
+	/// Messages can be received in [`Plugin::plugin_message`].
+	/// This is refered to as `PluginCommand` in TeamSpeak.
+	///
+	/// [`Plugin::plugin_message`]: plugin/trait.Plugin.html#method.plugin_message
+	pub fn send_plugin_message<S: AsRef<str>>(&self, plugin_id: &str, message: S) {
+		// FIXME: Needing the plugin id as argument is weird
+		unsafe {
+			let text = to_cstring!(message.as_ref());
+			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)
+					(self.id.0, to_cstring!(plugin_id).as_ptr(), text.as_ptr(),
+					PluginTargetMode::Server as i32, std::ptr::null(), std::ptr::null());
 		}
 	}
 
