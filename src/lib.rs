@@ -57,13 +57,15 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
+use std::borrow::Cow;
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
+use std::ops::Deref;
 use std::os::raw::{c_char, c_int};
 use chrono::*;
 
-/// Converts a normal string to a CString.
+/// Converts a normal `String` to a `CString`.
 macro_rules! to_cstring {
 	($string: expr) => {
 		CString::new($string).unwrap_or(
@@ -71,7 +73,7 @@ macro_rules! to_cstring {
 	};
 }
 
-/// Converts a CString to a normal string.
+/// Converts a `CString` to a normal `String`.
 macro_rules! to_string {
 	($string: expr) => {
 		String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned()
@@ -86,24 +88,6 @@ pub mod plugin;
 include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 
 // ******************** Structs ********************
-/// The main struct that contains all permanently save data.
-pub struct TsApi {
-	/// All known servers.
-	servers: Map<ServerId, Server>,
-	/// The plugin id from TeamSpeak.
-	plugin_id: String,
-}
-
-/// A struct for convenience. The invoker is maybe not visible to the user,
-/// but we can get events caused by him, so some information about him
-/// are passed along with his id.
-#[derive(Eq, Clone)]
-pub struct Invoker {
-	id: ConnectionId,
-	uid: String,
-	name: String,
-}
-
 /// The possible receivers of a message. A message can be sent to a specific
 /// connection, to the current channel chat or to the server chat.
 #[derive(Clone)]
@@ -129,11 +113,20 @@ pub struct ChannelId(u64);
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ConnectionId(u16);
 
+#[derive(Debug, Clone)]
+pub struct Permission {}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct PermissionId(u32);
 
+#[derive(Debug, Clone)]
+pub struct ServerGroup {}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ServerGroupId(u64);
+
+#[derive(Debug, Clone)]
+pub struct ChannelGroup {}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ChannelGroupId(u64);
@@ -142,18 +135,25 @@ pub struct ChannelGroupId(u64);
 // ******************** Implementation ********************
 
 // ********** Invoker **********
-impl PartialEq<Invoker> for Invoker {
-	fn eq(&self, other: &Invoker) -> bool {
+#[derive(Eq)]
+pub struct InvokerData {
+	id: ConnectionId,
+	uid: String,
+	name: String,
+}
+
+impl PartialEq<InvokerData> for InvokerData {
+	fn eq(&self, other: &InvokerData) -> bool {
 		self.id == other.id
 	}
 }
 
-impl Invoker {
-	fn new(id: ConnectionId, uid: String, name: String) -> Invoker {
-		Invoker {
-			id: id,
-			uid: uid,
-			name: name,
+impl InvokerData {
+	fn new(id: ConnectionId, uid: String, name: String) -> InvokerData {
+		InvokerData {
+			id,
+			uid,
+			name,
 		}
 	}
 
@@ -173,15 +173,83 @@ impl Invoker {
 	}
 }
 
+/// The invoker is maybe not visible to the user, but we can get events caused
+/// by him, so some information about him are passed along with his id.
+#[derive(Eq)]
+pub struct Invoker<'a> {
+	server: Server<'a>,
+	data: InvokerData,
+}
+
+impl<'a, 'b> PartialEq<Invoker<'b>> for Invoker<'a> {
+	fn eq(&self, other: &Invoker) -> bool {
+		self.server == other.server && self.data == other.data
+	}
+}
+impl<'a> Deref for Invoker<'a> {
+	type Target = InvokerData;
+	fn deref(&self) -> &Self::Target {
+		&self.data
+	}
+}
+
+impl<'a> Invoker<'a> {
+	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> {
+		Invoker {
+			server,
+			data,
+		}
+	}
+
+	pub fn get_connection(&self) -> Option<Connection> {
+		self.server.get_connection(self.id)
+	}
+}
+
 // ********** Server **********
-impl PartialEq<Server> for Server {
+#[derive(Clone)]
+pub struct Server<'a> {
+	api: &'a TsApi,
+	data: Cow<'a, ServerData>,
+}
+
+impl<'a, 'b> PartialEq<Server<'b>> for Server<'a> {
 	fn eq(&self, other: &Server) -> bool {
+		self.data == other.data
+	}
+}
+impl<'a> Eq for Server<'a> {}
+impl<'a> Deref for Server<'a> {
+	type Target = ServerData;
+	fn deref(&self) -> &Self::Target {
+		&self.data
+	}
+}
+
+impl<'a> Server<'a> {
+	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> {
+		Server {
+			api,
+			data: Cow::Borrowed(data),
+		}
+	}
+
+	fn new_owned(api: &'a TsApi, data: ServerData) -> Server<'a> {
+		Server {
+			api,
+			data: Cow::Owned(data),
+		}
+	}
+}
+
+impl PartialEq<ServerData> for ServerData {
+	fn eq(&self, other: &ServerData) -> bool {
 		self.id == other.id
 	}
 }
-impl Eq for Server {}
+impl Eq for ServerData {}
 
-impl Server {
+impl ServerData {
 	/// Get a server property that is stored as a string.
 	fn get_property_as_string(id: ServerId, property: VirtualServerProperties) -> Result<String, Error> {
 		unsafe {
@@ -242,7 +310,7 @@ impl Server {
 	/// Get all currently active connections on this server.
 	/// Called when a new Server is created.
 	/// When an error occurs, users are not inserted into the map.
-	fn query_connections(id: ServerId) -> Map<ConnectionId, Connection> {
+	fn query_connections(id: ServerId) -> Map<ConnectionId, ConnectionData> {
 		let mut map = Map::new();
 		// Query connected connections
 		let mut result: *mut u16 = std::ptr::null_mut();
@@ -254,7 +322,7 @@ impl Server {
 				let mut counter = 0;
 				while *result.offset(counter) != 0 {
 					let connection_id = ConnectionId(*result.offset(counter));
-					let mut connection = Connection::new(id, connection_id);
+					let mut connection = ConnectionData::new(id, connection_id);
 					connection.update();
 					map.insert(connection_id, connection);
 					counter += 1;
@@ -267,7 +335,7 @@ impl Server {
 	/// Get all channels on this server.
 	/// Called when a new Server is created.
 	/// When an error occurs, channels are not inserted into the map.
-	fn query_channels(id: ServerId) -> Result<Map<ChannelId, Channel>, Error> {
+	fn query_channels(id: ServerId) -> Result<Map<ChannelId, ChannelData>, Error> {
 		let mut map = Map::new();
 		// Query connected connections
 		let mut result: *mut u64 = std::ptr::null_mut();
@@ -279,7 +347,7 @@ impl Server {
 				let mut counter = 0;
 				while *result.offset(counter) != 0 {
 					let channel_id = ChannelId(*result.offset(counter));
-					let mut channel = Channel::new(id, channel_id);
+					let mut channel = ChannelData::new(id, channel_id);
 					channel.update();
 					map.insert(channel_id, channel);
 					counter += 1;
@@ -293,21 +361,21 @@ impl Server {
 
 	// ********** Private Interface **********
 
-	fn add_connection(&mut self, connection_id: ConnectionId) -> &mut Connection {
-		let mut connection = Connection::new(self.id, connection_id);
+	fn add_connection(&mut self, connection_id: ConnectionId) -> &mut ConnectionData {
+		let mut connection = ConnectionData::new(self.id, connection_id);
 		connection.update();
 		self.visible_connections.insert(connection_id, connection);
 		self.visible_connections.get_mut(&connection_id).unwrap()
 	}
 
-	fn remove_connection(&mut self, connection_id: ConnectionId) -> Option<Connection> {
+	fn remove_connection(&mut self, connection_id: ConnectionId) -> Option<ConnectionData> {
 		self.visible_connections.remove(&connection_id)
 	}
 
-	fn add_channel(&mut self, channel_id: ChannelId) -> Result<&mut Channel, Error> {
+	fn add_channel(&mut self, channel_id: ChannelId) -> Result<&mut ChannelData, Error> {
 		match self.channels {
 			Ok(ref mut cs) => {
-				let mut channel = Channel::new(self.id, channel_id);
+				let mut channel = ChannelData::new(self.id, channel_id);
 				channel.update();
 				cs.insert(channel_id, channel);
 				Ok(cs.get_mut(&channel_id).unwrap())
@@ -316,47 +384,107 @@ impl Server {
 		}
 	}
 
-	fn remove_channel(&mut self, channel_id: ChannelId) -> Option<Channel> {
-		self.channels.as_mut().ok().and_then(|mut cs| cs.remove(&channel_id))
+	fn remove_channel(&mut self, channel_id: ChannelId) -> Option<ChannelData> {
+		self.channels.as_mut().ok().and_then(|cs| cs.remove(&channel_id))
+	}
+
+	/// Get the mutable connection on this server that has the specified id, returns
+	/// `None` if there is no such connection.
+	fn get_mut_connection(&mut self, connection_id: ConnectionId) -> Option<&mut ConnectionData> {
+		self.visible_connections.get_mut(&connection_id)
+	}
+
+	/// Get the mutable channel on this server that has the specified id, returns
+	/// `None` if there is no such channel.
+	fn get_mut_channel(&mut self, channel_id: ChannelId) -> Option<&mut ChannelData> {
+		self.channels.as_mut().ok().and_then(|cs| cs.get_mut(&channel_id))
+	}
+}
+
+impl<'a> Server<'a> {
+	/// Get the connection on this server that has the specified id, returns
+	/// `None` if there is no such connection.
+	fn get_connection_unwrap(&'a self, connection_id: ConnectionId) -> Connection<'a> {
+		self.get_connection(connection_id)
+			.unwrap_or_else(|| {
+				self.api.log_or_print(format!("Can't find connection {:?}", connection_id), "rust-ts3plugin", ::LogLevel::Warning);
+				Connection::<'a>::new_owned(&self.api, ConnectionData::new(self.id, connection_id))
+			})
+	}
+
+	/// Get the channel on this server that has the specified id, returns
+	/// `None` if there is no such channel.
+	fn get_channel_unwrap(&'a self, channel_id: ChannelId) -> Channel<'a> {
+		self.get_channel(channel_id)
+			.unwrap_or_else(|| {
+				self.api.log_or_print(format!("Can't find channel {:?}", channel_id), "rust-ts3plugin", ::LogLevel::Warning);
+				Channel::<'a>::new_owned(&self.api, ChannelData::new(self.id, channel_id))
+			})
+	}
+
+	fn get_server_group_unwrap(&self, server_group_id: ServerGroupId)
+		-> ServerGroup {
+		self.get_server_group(server_group_id)
+			.unwrap_or_else(|| {
+				self.api.log_or_print(format!("Can't find server group {:?}", server_group_id), "rust-ts3plugin", ::LogLevel::Warning);
+				ServerGroup { }
+			})
+	}
+
+	fn get_channel_group_unwrap(&self, channel_group_id: ChannelGroupId)
+		-> ChannelGroup {
+		self.get_channel_group(channel_group_id)
+			.unwrap_or_else(|| {
+				self.api.log_or_print(format!("Can't find channel group {:?}", channel_group_id), "rust-ts3plugin", ::LogLevel::Warning);
+				ChannelGroup { }
+			})
 	}
 
 	// ********** Public Interface **********
 
+	/// Get the own connection to the server.
+	pub fn get_own_connection(&'a self) -> Result<Connection<'a>, Error> {
+		self.get_own_connection_id().map(|id| self.get_connection_unwrap(id))
+	}
+
 	/// Get the ids of all visible connections on this server.
-	pub fn get_connection_ids(&self) -> Vec<ConnectionId> {
-		self.visible_connections.keys().cloned().collect()
+	pub fn get_connections(&'a self) -> Vec<Connection<'a>> {
+		self.visible_connections.values().map(|c| Connection::new(self.api, &c))
+			.collect()
 	}
 
 	/// Get the ids of all channels on this server.
-	pub fn get_channel_ids(&self) -> Vec<ChannelId> {
+	pub fn get_channels(&'a self) -> Vec<Channel<'a>> {
 		match self.channels {
-			Ok(ref cs) => cs.keys().cloned().collect(),
+			Ok(ref cs) => cs.values().map(|c| Channel::new(self.api, &c)).collect(),
 			Err(_) => Vec::new(),
 		}
 	}
 
 	/// Get the connection on this server that has the specified id, returns
 	/// `None` if there is no such connection.
-	pub fn get_connection(&self, connection_id: ConnectionId) -> Option<&Connection> {
+	pub fn get_connection(&self, connection_id: ConnectionId) -> Option<Connection> {
 		self.visible_connections.get(&connection_id)
-	}
-
-	/// Get the mutable connection on this server that has the specified id, returns
-	/// `None` if there is no such connection.
-	pub fn get_mut_connection(&mut self, connection_id: ConnectionId) -> Option<&mut Connection> {
-		self.visible_connections.get_mut(&connection_id)
+			.map(|c| Connection::new(&self.api, c))
 	}
 
 	/// Get the channel on this server that has the specified id, returns
 	/// `None` if there is no such channel.
-	pub fn get_channel(&self, channel_id: ChannelId) -> Option<&Channel> {
+	pub fn get_channel(&self, channel_id: ChannelId) -> Option<Channel> {
 		self.channels.as_ref().ok().and_then(|cs| cs.get(&channel_id))
+			.map(|c| Channel::new(&self.api, c))
 	}
 
-	/// Get the mutable channel on this server that has the specified id, returns
-	/// `None` if there is no such channel.
-	pub fn get_mut_channel(&mut self, channel_id: ChannelId) -> Option<&mut Channel> {
-		self.channels.as_mut().ok().and_then(|cs| cs.get_mut(&channel_id))
+	pub fn get_server_group(&self, server_group_id: ServerGroupId)
+		-> Option<ServerGroup> {
+		// TODO
+		None
+	}
+
+	pub fn get_channel_group(&self, channel_group_id: ChannelGroupId)
+		-> Option<ChannelGroup> {
+		// TODO
+		None
 	}
 
 	/// Send a message to the server chat.
@@ -379,12 +507,11 @@ impl Server {
 	/// This is refered to as `PluginCommand` in TeamSpeak.
 	///
 	/// [`Plugin::plugin_message`]: plugin/trait.Plugin.html#method.plugin_message
-	pub fn send_plugin_message<S: AsRef<str>>(&self, plugin_id: &str, message: S) {
-		// FIXME: Needing the plugin id as argument is weird
+	pub fn send_plugin_message<S: AsRef<str>>(&self, message: S) {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)
-					(self.id.0, to_cstring!(plugin_id).as_ptr(), text.as_ptr(),
+					(self.id.0, to_cstring!(self.api.get_plugin_id()).as_ptr(), text.as_ptr(),
 					PluginTargetMode::Server as i32, std::ptr::null(), std::ptr::null());
 		}
 	}
@@ -401,14 +528,49 @@ impl Server {
 }
 
 // ********** Channel **********
-impl PartialEq<Channel> for Channel {
+#[derive(Clone)]
+pub struct Channel<'a> {
+	api: &'a TsApi,
+	data: Cow<'a, ChannelData>,
+}
+
+impl<'a, 'b> PartialEq<Channel<'b>> for Channel<'a> {
 	fn eq(&self, other: &Channel) -> bool {
+		self.data == other.data
+	}
+}
+impl<'a> Eq for Channel<'a> {}
+impl<'a> Deref for Channel<'a> {
+	type Target = ChannelData;
+	fn deref(&self) -> &Self::Target {
+		&self.data
+	}
+}
+
+impl<'a> Channel<'a> {
+	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> {
+		Channel {
+			api,
+			data: Cow::Borrowed(data),
+		}
+	}
+
+	fn new_owned(api: &'a TsApi, data: ChannelData) -> Channel<'a> {
+		Channel {
+			api,
+			data: Cow::Owned(data),
+		}
+	}
+}
+
+impl PartialEq<ChannelData> for ChannelData {
+	fn eq(&self, other: &ChannelData) -> bool {
 		self.server_id == other.server_id && self.id == other.id
 	}
 }
-impl Eq for Channel {}
+impl Eq for ChannelData {}
 
-impl Channel {
+impl ChannelData {
 	/// Get a channel property that is stored as a string.
 	fn get_property_as_string(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<String, Error> {
 		unsafe {
@@ -481,14 +643,49 @@ impl Channel {
 }
 
 // ********** Connection **********
-impl PartialEq<Connection> for Connection {
+#[derive(Clone)]
+pub struct Connection<'a> {
+	api: &'a TsApi,
+	data: Cow<'a, ConnectionData>,
+}
+
+impl<'a, 'b> PartialEq<Connection<'b>> for Connection<'a> {
 	fn eq(&self, other: &Connection) -> bool {
+		self.data == other.data
+	}
+}
+impl<'a> Eq for Connection<'a> {}
+impl<'a, 'b> Deref for Connection<'a> {
+	type Target = ConnectionData;
+	fn deref(&self) -> &Self::Target {
+		&self.data
+	}
+}
+
+impl<'a> Connection<'a> {
+	fn new(api: &'a TsApi, data: &'a ConnectionData) -> Connection<'a> {
+		Connection {
+			api,
+			data: Cow::Borrowed(data),
+		}
+	}
+
+	fn new_owned(api: &'a TsApi, data: ConnectionData) -> Connection<'a> {
+		Connection {
+			api,
+			data: Cow::Owned(data),
+		}
+	}
+}
+
+impl PartialEq<ConnectionData> for ConnectionData {
+	fn eq(&self, other: &ConnectionData) -> bool {
 		self.server_id == other.server_id && self.id == other.id
 	}
 }
-impl Eq for Connection {}
+impl Eq for ConnectionData {}
 
-impl Connection {
+impl ConnectionData {
 	/// Get a connection property that is stored as a string.
 	fn get_connection_property_as_string(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<String, Error> {
 		unsafe {
@@ -602,10 +799,25 @@ impl Connection {
 	}
 }
 
+impl<'a> Connection<'a> {
+	/// Get the server of this connection.
+	pub fn get_server(&'a self) -> Server<'a> {
+		self.api.get_server_unwrap(self.get_server_id())
+	}
+}
+
 
 // ********** TsApi **********
 /// The api functions provided by TeamSpeak
 static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
+
+/// The main struct that contains all permanently save data.
+pub struct TsApi {
+	/// All known servers.
+	servers: Map<ServerId, ServerData>,
+	/// The plugin id from TeamSpeak.
+	plugin_id: String,
+}
 
 // Don't provide a default Implementation because we don't want the TsApi
 // to be publicly constructable.
@@ -687,23 +899,23 @@ impl TsApi {
 
 	/// Add the server with the specified id to the server list.
 	/// The currently available data of this server will be stored.
-	fn add_server(&mut self, server_id: ServerId) -> &mut Server {
-		self.servers.insert(server_id, Server::new(server_id));
-		let mut server = self.servers.get_mut(&server_id).unwrap();
+	fn add_server(&mut self, server_id: ServerId) -> &mut ServerData {
+		self.servers.insert(server_id, ServerData::new(server_id));
+		let server = self.servers.get_mut(&server_id).unwrap();
 		server.update();
 		server
 	}
 
 	/// Returns true if a server was removed
-	fn remove_server(&mut self, server_id: ServerId) -> bool {
-		self.servers.remove(&server_id).is_some()
+	fn remove_server(&mut self, server_id: ServerId) -> Option<ServerData> {
+		self.servers.remove(&server_id)
 	}
 
 	/// Update the data of a connection with the data from the same connection
 	/// as an invoker if possible.
-	fn try_update_invoker(&mut self, server_id: ServerId, invoker: &Invoker) {
+	fn try_update_invoker(&mut self, server_id: ServerId, invoker: &InvokerData) {
 		if let Some(server) = self.get_mut_server(server_id) {
-			if let Some(mut connection) = server.get_mut_connection(invoker.get_id()) {
+			if let Some(connection) = server.get_mut_connection(invoker.get_id()) {
 				if connection.get_uid() != Ok(invoker.get_uid()) {
 					connection.uid = Ok(invoker.get_uid().clone());
 				}
@@ -722,7 +934,7 @@ impl TsApi {
 	/// be filled and the max lenght of the buffer.
 	fn get_path<F: Fn(*mut c_char, usize)>(fun: F) -> String {
 		const START_SIZE: usize = 512;
-		const MAX_SIZE: usize = 1000000;
+		const MAX_SIZE: usize = 1_000_000;
 		let mut size = START_SIZE;
 		loop {
 			let mut buf = vec![0 as u8; size];
@@ -740,6 +952,23 @@ impl TsApi {
 		}
 	}
 
+	/// Get the mutable server that has the specified id, returns `None` if there is no
+	/// such server.
+	fn get_mut_server(&mut self, server_id: ServerId) -> Option<&mut ServerData> {
+		self.servers.get_mut(&server_id)
+	}
+
+	fn get_server_unwrap<'a>(&'a self, server_id: ServerId) -> Server<'a> {
+		self.servers.get(&server_id)
+			.map(|s| Server::<'a>::new(&self, s))
+			.unwrap_or_else(|| {
+				// Ignore here, there are too many messages when we are not yet
+				// fully connected (or already disconnected), but sound is sent.
+				// self.log_or_print(format!("Can't find server {:?}\n{:?}", server_id, backtrace::Backtrace::new()), "rust-ts3plugin", ::LogLevel::Warning);
+				Server::<'a>::new_owned(&self, ServerData::new(server_id))
+			})
+	}
+
 	// ********** Public Interface **********
 
 	/// Get the raw TeamSpeak api functions.
@@ -755,9 +984,9 @@ impl TsApi {
 		&self.plugin_id
 	}
 
-	/// Get all server ids to which this client is currently connected.
-	pub fn get_server_ids(&self) -> Vec<ServerId> {
-		self.servers.keys().cloned().collect()
+	/// Get all servers to which this client is currently connected.
+	pub fn get_servers<'a>(&'a self) -> Vec<Server<'a>> {
+		self.servers.values().map(|s| Server::new(&self, &s)).collect()
 	}
 
 	/// Log a message using the TeamSpeak logging API.
@@ -773,14 +1002,14 @@ impl TsApi {
 
 	/// Get the server that has the specified id, returns `None` if there is no
 	/// such server.
-	pub fn get_server(&self, server_id: ServerId) -> Option<&Server> {
+	pub fn get_server(&self, server_id: ServerId) -> Option<Server> {
 		self.servers.get(&server_id)
+			.map(|s| Server::new(&self, s))
 	}
 
-	/// Get the mutable server that has the specified id, returns `None` if there is no
-	/// such server.
-	pub fn get_mut_server(&mut self, server_id: ServerId) -> Option<&mut Server> {
-		self.servers.get_mut(&server_id)
+	pub fn get_permission(&self, permission_id: PermissionId) -> Option<&Permission> {
+		// TODO
+		None
 	}
 
 	/// Print a message to the currently selected tab. This is only

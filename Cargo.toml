@@ -12,7 +12,7 @@ readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
-build = "src/build.rs"
+build = "build/build.rs"
 
 [badges]
 travis-ci = { repository = "Flakebi/rust-ts3plugin" }
@@ -24,7 +24,7 @@ name = "ts3plugin"
 default = []
 
 [dependencies]
-chrono = "0.2"
+chrono = "0.4"
 ts3plugin-sys = "0.3"
 lazy_static = "0.2"
 
