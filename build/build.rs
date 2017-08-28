@@ -41,8 +41,10 @@ struct Property<'a> {
 	default_args: Cow<'a, str>,
 	/// Arguments passed to the function when updating the property.
 	default_args_update: Cow<'a, str>,
+	/// If an api getter should be created for this property.
+	api_getter: bool,
 	/// If the getter method should be public.
-	getter_public: bool,
+	public: bool,
 }
 
 impl<'a> Property<'a> {
@@ -91,7 +93,7 @@ impl<'a> Property<'a> {
 
 		let mut s = String::new();
 		// Create the getter
-		if self.getter_public {
+		if self.public {
 			s.push_str("pub ");
 		}
 		s.push_str(format!("fn get_{}(&self) -> {} {{\n", self.name, self.create_return_type(is_ref_type)).as_str());
@@ -110,6 +112,26 @@ impl<'a> Property<'a> {
 		}
 		body.push('\n');
 		s.push_str(indent(body, 1).as_str());
+		s.push_str("}\n");
+		s
+	}
+
+	fn create_api_getter(&self) -> String {
+		if !self.api_getter {
+			return String::new();
+		}
+		let is_ref_type = ["String", "Permissions"].contains(&self.type_s.as_ref())
+			|| self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
+			|| self.type_s.starts_with("Vec<");;
+
+		let mut s = String::new();
+		// Create the getter
+		s.push_str(format!("pub fn get_{}(&self) -> {} {{\n", self.name, self.create_return_type(is_ref_type)).as_str());
+		s.push_str(indent(format!("\
+			match self.data {{\n\
+				\tOk(data) => data.get_{}(),\n\
+				\tErr(_) => Err(Error::Ok),\n\
+			}}\n", self.name), 1).as_str());
 		s.push_str("}\n");
 		s
 	}
@@ -221,7 +243,8 @@ struct PropertyBuilder<'a> {
 	transmutable: Vec<Cow<'a, str>>,
 	default_args: Cow<'a, str>,
 	default_args_update: Cow<'a, str>,
-	getter_public: bool,
+	api_getter: bool,
+	public: bool,
 }
 
 #[allow(dead_code)]
@@ -231,7 +254,8 @@ impl<'a> PropertyBuilder<'a> {
 		result.initialise = true;
 		result.result = true;
 		result.should_update = true;
-		result.getter_public = true;
+		result.api_getter = true;
+		result.public = true;
 		result
 	}
 
@@ -325,9 +349,15 @@ impl<'a> PropertyBuilder<'a> {
 		res
 	}
 
-	fn getter_public(&self, getter_public: bool) -> PropertyBuilder<'a> {
+	fn api_getter(&self, api_getter: bool) -> PropertyBuilder<'a> {
 		let mut res = self.clone();
-		res.getter_public = getter_public;
+		res.api_getter = api_getter;
+		res
+	}
+
+	fn public(&self, public: bool) -> PropertyBuilder<'a> {
+		let mut res = self.clone();
+		res.public = public;
 		res
 	}
 
@@ -348,7 +378,8 @@ impl<'a> PropertyBuilder<'a> {
 			transmutable: self.transmutable.clone(),
 			default_args: self.default_args,
 			default_args_update: self.default_args_update,
-			getter_public: self.getter_public,
+			api_getter: self.api_getter,
+			public: self.public,
 		}
 	}
 }
@@ -356,6 +387,8 @@ impl<'a> PropertyBuilder<'a> {
 struct Struct<'a> {
 	/// The name of this struct
 	name: Cow<'a, str>,
+	/// The name of this struct when exposed by the api
+	api_name: Cow<'a, str>,
 	/// The documentation of this struct
 	documentation: Cow<'a, str>,
 	/// Members that will be generated for this struct
@@ -368,27 +401,39 @@ struct Struct<'a> {
 	extra_creation: Cow<'a, str>,
 	/// Arguments that are taken by the constructor
 	constructor_args: Cow<'a, str>,
+	/// If the resulting struct is public
+	public: bool,
 }
 
 #[derive(Default, Clone)]
 struct StructBuilder<'a> {
 	name: Cow<'a, str>,
+	api_name: Cow<'a, str>,
 	documentation: Cow<'a, str>,
 	properties: Vec<Property<'a>>,
 	extra_attributes: Cow<'a, str>,
 	extra_initialisation: Cow<'a, str>,
 	extra_creation: Cow<'a, str>,
 	constructor_args: Cow<'a, str>,
+	public: bool,
 }
 
 impl<'a> StructBuilder<'a> {
 	fn new() -> StructBuilder<'a> {
-		Self::default()
+		let mut result = Self::default();
+		result.public = true;
+		result
 	}
 
 	fn name<S: Into<Cow<'a, str>>>(&mut self, name: S) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.name = name.into();
+		res
+	}
+
+	fn api_name<S: Into<Cow<'a, str>>>(&mut self, api_name: S) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.api_name = api_name.into();
 		res
 	}
 
@@ -428,9 +473,16 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
+	fn public(&mut self, public: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.public = public;
+		res
+	}
+
 	fn finalize(self) -> Struct<'a> {
 		Struct {
 			name: self.name,
+			api_name: self.api_name,
 			documentation: self.documentation,
 			// Move the contents of the properties
 			properties: self.properties.clone(),
@@ -438,6 +490,7 @@ impl<'a> StructBuilder<'a> {
 			extra_initialisation: self.extra_initialisation,
 			extra_creation: self.extra_creation,
 			constructor_args: self.constructor_args,
+			public: self.public,
 		}
 	}
 }
@@ -452,7 +505,11 @@ impl<'a> Struct<'a> {
 		if !self.documentation.is_empty() {
 			result.push_str(format!("/// {}\n", self.documentation).as_str());
 		}
-		result.push_str(format!("#[derive(Clone)]\npub struct {} {{\n{}", self.name, indent(s, 1)).as_str());
+		result.push_str("#[derive(Clone)]\n");
+		if self.public {
+			result.push_str("pub ");
+		}
+		result.push_str(format!("struct {} {{\n{}", self.name, indent(s, 1)).as_str());
 		if !self.extra_attributes.is_empty() {
 			result.push_str(format!("\n{}", indent(self.extra_attributes.as_ref(), 1)).as_str());
 		}
@@ -467,6 +524,16 @@ impl<'a> Struct<'a> {
 		}
 		let mut result = String::new();
 		write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
+		result
+	}
+
+	fn create_api_impl(&self) -> String {
+		let mut s = String::new();
+		for prop in &self.properties {
+			s.push_str(prop.create_api_getter().as_str());
+		}
+		let mut result = String::new();
+		write!(result, "impl<'a> {}<'a> {{\n{}}}\n\n", self.api_name, indent(s, 1)).unwrap();
 		result
 	}
 

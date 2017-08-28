@@ -34,13 +34,20 @@ pub fn create(f: &mut Write) {
 			builder_optional_data.name("description").type_s("String").finalize(),
 		]).finalize();
 	// The real channel data
-	let channel = StructBuilder::new().name("ChannelData")
+	let builder = builder.public(false);
+	let builder_string = builder_string.public(false);
+	let builder_i32 = builder_i32.public(false);
+	let builder_bool = builder_bool.public(false);
+	let channel = StructBuilder::new()
+		.name("ChannelData")
+		.api_name("Channel")
+		.public(false)
 		.constructor_args("server_id: ServerId, id: ChannelId")
 		.properties(vec![
-			builder.name("id").type_s("ChannelId").result(false).finalize(),
-			builder.name("server_id").type_s("ServerId").result(false).finalize(),
+			builder.name("id").type_s("ChannelId").result(false).api_getter(false).finalize(),
+			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
 			builder.name("parent_channel_id").type_s("ChannelId").update("Self::query_parent_channel_id(self.server_id, self.id)")
-				.documentation("The id of the parent channel, 0 if there is no parent channel").finalize(),
+				.documentation("The id of the parent channel, 0 if there is no parent channel").api_getter(false).finalize(),
 			builder_string.name("name").finalize(),
 			builder_string.name("topic").finalize(),
 			builder.name("codec").type_s("CodecType").finalize(),
@@ -66,7 +73,7 @@ pub fn create(f: &mut Write) {
 			builder_i32.name("icon_id").finalize(),
 			builder_bool.name("private").value_name("FlagPrivate").finalize(),
 
-			builder.name("optional_data").type_s("OptionalChannelData").initialisation("OptionalChannelData::new(server_id, id)").update("OptionalChannelData::new(self.server_id, self.id)").result(false).finalize(),
+			builder.name("optional_data").type_s("OptionalChannelData").initialisation("OptionalChannelData::new(server_id, id)").update("OptionalChannelData::new(self.server_id, self.id)").result(false).api_getter(false).finalize(),
 		]).finalize();
 
 	// Structs
@@ -80,4 +87,5 @@ pub fn create(f: &mut Write) {
 	f.write_all(channel.create_impl().as_bytes()).unwrap();
 	f.write_all(channel.create_update().as_bytes()).unwrap();
 	f.write_all(channel.create_constructor().as_bytes()).unwrap();
+	f.write_all(channel.create_api_impl().as_bytes()).unwrap();
 }

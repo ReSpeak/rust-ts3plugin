@@ -73,7 +73,13 @@ pub fn create(f: &mut Write) {
 			builder.name("hostmessage_mode").type_s("HostmessageMode").finalize(),
 		]).finalize();
 	// The real server data
-	let server = StructBuilder::new().name("ServerData")
+	let builder = builder.public(false);
+	let builder_string = builder_string.public(false);
+	let builder_i32 = builder_i32.public(false);
+	let server = StructBuilder::new()
+		.name("ServerData")
+		.api_name("Server")
+		.public(false)
 		.constructor_args("id: ServerId")
 		.extra_attributes("\
 			outdated_data: OutdatedServerData,\n")
@@ -87,9 +93,9 @@ pub fn create(f: &mut Write) {
 				\thostmessage_mode: hostmessage_mode,\n\
 			},\n")
 		.properties(vec![
-			builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).finalize(),
+			builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).api_getter(false).finalize(),
 			builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
-			builder.name("own_connection_id").type_s("ConnectionId").update("Self::query_own_connection_id(self.id)").getter_public(false).finalize(),
+			builder.name("own_connection_id").type_s("ConnectionId").update("Self::query_own_connection_id(self.id)").api_getter(false).finalize(),
 			builder_string.name("name").finalize(),
 			builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
 			builder_string.name("platform").finalize(),
@@ -114,9 +120,9 @@ pub fn create(f: &mut Write) {
 			builder_i32.name("reserved_slots").finalize(),
 			builder.name("ask_for_privilegekey").type_s("bool").finalize(),
 			builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
-			builder.name("visible_connections").type_s("Map<ConnectionId, ConnectionData>").result(false).initialisation("Map::new()").update("Self::query_connections(self.id)").finalize(),
-			builder.name("channels").type_s("Map<ChannelId, ChannelData>").update("Self::query_channels(self.id)").finalize(),
-			builder.name("optional_data").type_s("OptionalServerData").result(false).initialisation("OptionalServerData::new(id)").update("OptionalServerData::new(self.id)").finalize(),
+			builder.name("visible_connections").type_s("Map<ConnectionId, ConnectionData>").result(false).initialisation("Map::new()").update("Self::query_connections(self.id)").api_getter(false).finalize(),
+			builder.name("channels").type_s("Map<ChannelId, ChannelData>").update("Self::query_channels(self.id)").api_getter(false).finalize(),
+			builder.name("optional_data").type_s("OptionalServerData").result(false).initialisation("OptionalServerData::new(id)").update("OptionalServerData::new(self.id)").api_getter(false).finalize(),
 		]).finalize();
 
 	// Structs
@@ -135,6 +141,7 @@ impl ServerData {
 	}
 }\n\n".as_bytes()).unwrap();
 	f.write_all(server.create_update().as_bytes()).unwrap();
+	f.write_all(server.create_api_impl().as_bytes()).unwrap();
 
 	// Initialize variables
 	f.write_all(server.create_constructor().as_bytes()).unwrap();

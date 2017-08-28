@@ -22,7 +22,7 @@
 //!     fn autoload() -> bool { false }
 //!     fn configurable() -> ConfigureOffer { ConfigureOffer::No }
 //!
-//!     fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+//!     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
 //!         Ok(Box::new(MyTsPlugin))
 //!         // Or return Err(InitError::Failure) on failure
@@ -30,7 +30,7 @@
 //!
 //!     // Implement callbacks here
 //!
-//!     fn shutdown(&mut self, api: &mut TsApi) {
+//!     fn shutdown(&mut self, api: &TsApi) {
 //!         api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
 //!     }
 //! }
@@ -57,7 +57,6 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
-use std::borrow::Cow;
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
@@ -210,37 +209,15 @@ impl<'a> Invoker<'a> {
 #[derive(Clone)]
 pub struct Server<'a> {
 	api: &'a TsApi,
-	data: Cow<'a, ServerData>,
+	data: Result<&'a ServerData, ServerId>,
 }
 
 impl<'a, 'b> PartialEq<Server<'b>> for Server<'a> {
-	fn eq(&self, other: &Server) -> bool {
-		self.data == other.data
+	fn eq(&self, other: &Server<'b>) -> bool {
+		self.get_id() == other.get_id()
 	}
 }
 impl<'a> Eq for Server<'a> {}
-impl<'a> Deref for Server<'a> {
-	type Target = ServerData;
-	fn deref(&self) -> &Self::Target {
-		&self.data
-	}
-}
-
-impl<'a> Server<'a> {
-	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> {
-		Server {
-			api,
-			data: Cow::Borrowed(data),
-		}
-	}
-
-	fn new_owned(api: &'a TsApi, data: ServerData) -> Server<'a> {
-		Server {
-			api,
-			data: Cow::Owned(data),
-		}
-	}
-}
 
 impl PartialEq<ServerData> for ServerData {
 	fn eq(&self, other: &ServerData) -> bool {
@@ -402,23 +379,48 @@ impl ServerData {
 }
 
 impl<'a> Server<'a> {
+	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> {
+		Server {
+			api,
+			data: Ok(data),
+		}
+	}
+
+	fn new_err(api: &'a TsApi, server_id: ServerId) -> Server<'a> {
+		Server {
+			api,
+			data: Err(server_id),
+		}
+	}
+
+	pub fn get_id(&self) -> ServerId {
+		match self.data {
+			Ok(data) => data.get_id(),
+			Err(id) => id,
+		}
+	}
+
 	/// Get the connection on this server that has the specified id, returns
 	/// `None` if there is no such connection.
-	fn get_connection_unwrap(&'a self, connection_id: ConnectionId) -> Connection<'a> {
+	fn get_connection_unwrap(&self, connection_id: ConnectionId) -> Connection<'a> {
 		self.get_connection(connection_id)
 			.unwrap_or_else(|| {
-				self.api.log_or_print(format!("Can't find connection {:?}", connection_id), "rust-ts3plugin", ::LogLevel::Warning);
-				Connection::<'a>::new_owned(&self.api, ConnectionData::new(self.id, connection_id))
+				self.api.log_or_print(
+					format!("Can't find connection {:?}", connection_id),
+					"rust-ts3plugin", ::LogLevel::Warning);
+				Connection::new_err(&self.api, self.get_id(), connection_id)
 			})
 	}
 
 	/// Get the channel on this server that has the specified id, returns
 	/// `None` if there is no such channel.
-	fn get_channel_unwrap(&'a self, channel_id: ChannelId) -> Channel<'a> {
+	fn get_channel_unwrap(&self, channel_id: ChannelId) -> Channel<'a> {
 		self.get_channel(channel_id)
 			.unwrap_or_else(|| {
-				self.api.log_or_print(format!("Can't find channel {:?}", channel_id), "rust-ts3plugin", ::LogLevel::Warning);
-				Channel::<'a>::new_owned(&self.api, ChannelData::new(self.id, channel_id))
+				self.api.log_or_print(
+					format!("Can't find channel {:?}", channel_id),
+					"rust-ts3plugin", ::LogLevel::Warning);
+				Channel::new_owned(&self.api, self.get_id(), channel_id)
 			})
 	}
 
@@ -426,7 +428,9 @@ impl<'a> Server<'a> {
 		-> ServerGroup {
 		self.get_server_group(server_group_id)
 			.unwrap_or_else(|| {
-				self.api.log_or_print(format!("Can't find server group {:?}", server_group_id), "rust-ts3plugin", ::LogLevel::Warning);
+				self.api.log_or_print(
+					format!("Can't find server group {:?}", server_group_id),
+					"rust-ts3plugin", ::LogLevel::Warning);
 				ServerGroup { }
 			})
 	}
@@ -442,37 +446,53 @@ impl<'a> Server<'a> {
 
 	// ********** Public Interface **********
 
+	/// The server properties that are only available on request.
+	pub fn get_optional_data(&self) -> Option<&OptionalServerData> {
+		self.data.ok().map(|data| &data.optional_data)
+	}
+
 	/// Get the own connection to the server.
-	pub fn get_own_connection(&'a self) -> Result<Connection<'a>, Error> {
-		self.get_own_connection_id().map(|id| self.get_connection_unwrap(id))
+	pub fn get_own_connection(&self) -> Result<Connection<'a>, Error> {
+		match self.data {
+			Ok(data) => data.get_own_connection_id().map(|id| self.get_connection_unwrap(id)),
+			Err(_) => Err(Error::Ok),
+		}
 	}
 
 	/// Get the ids of all visible connections on this server.
-	pub fn get_connections(&'a self) -> Vec<Connection<'a>> {
-		self.visible_connections.values().map(|c| Connection::new(self.api, &c))
-			.collect()
+	pub fn get_connections(&self) -> Vec<Connection<'a>> {
+		match self.data {
+			Ok(data) => data.visible_connections.values()
+				.map(|c| Connection::new(self.api, &c)).collect(),
+			Err(_) => Vec::new(),
+		}
 	}
 
 	/// Get the ids of all channels on this server.
-	pub fn get_channels(&'a self) -> Vec<Channel<'a>> {
-		match self.channels {
-			Ok(ref cs) => cs.values().map(|c| Channel::new(self.api, &c)).collect(),
+	pub fn get_channels(&self) -> Vec<Channel<'a>> {
+		match self.data {
+			Ok(data) => match data.channels {
+				Ok(ref cs) => cs.values().map(|c| Channel::new(self.api, &c)).collect(),
+				Err(_) => Vec::new(),
+			}
 			Err(_) => Vec::new(),
 		}
 	}
 
 	/// Get the connection on this server that has the specified id, returns
 	/// `None` if there is no such connection.
-	pub fn get_connection(&self, connection_id: ConnectionId) -> Option<Connection> {
-		self.visible_connections.get(&connection_id)
-			.map(|c| Connection::new(&self.api, c))
+	pub fn get_connection(&self, connection_id: ConnectionId) -> Option<Connection<'a>> {
+		self.data.ok().and_then(|data|
+			data.visible_connections.get(&connection_id)
+				.map(|c| Connection::new(&self.api, c)))
 	}
 
 	/// Get the channel on this server that has the specified id, returns
 	/// `None` if there is no such channel.
-	pub fn get_channel(&self, channel_id: ChannelId) -> Option<Channel> {
-		self.channels.as_ref().ok().and_then(|cs| cs.get(&channel_id))
-			.map(|c| Channel::new(&self.api, c))
+	pub fn get_channel(&self, channel_id: ChannelId) -> Option<Channel<'a>> {
+		self.data.ok().and_then(|data|
+			data.channels.as_ref().ok().and_then(|cs| cs.get(&channel_id))
+				.map(|c| Channel::new(&self.api, c)))
 	}
 
 	pub fn get_server_group(&self, server_group_id: ServerGroupId)
@@ -493,7 +513,7 @@ impl<'a> Server<'a> {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
 				.expect("Functions should be loaded").request_send_server_text_msg)
-					(self.id.0, text.as_ptr(), std::ptr::null()));
+					(self.get_id().0, text.as_ptr(), std::ptr::null()));
 			match res {
 				Error::Ok => Ok(()),
 				_ => Err(res)
@@ -511,7 +531,7 @@ impl<'a> Server<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)
-					(self.id.0, to_cstring!(self.api.get_plugin_id()).as_ptr(), text.as_ptr(),
+					(self.get_id().0, to_cstring!(self.api.get_plugin_id()).as_ptr(), text.as_ptr(),
 					PluginTargetMode::Server as i32, std::ptr::null(), std::ptr::null());
 		}
 	}
@@ -522,7 +542,7 @@ impl<'a> Server<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").print_message)
-					(self.id.0, text.as_ptr(), target);
+					(self.get_id().0, text.as_ptr(), target);
 		}
 	}
 }
@@ -531,37 +551,16 @@ impl<'a> Server<'a> {
 #[derive(Clone)]
 pub struct Channel<'a> {
 	api: &'a TsApi,
-	data: Cow<'a, ChannelData>,
+	data: Result<&'a ChannelData, (ServerId, ChannelId)>,
 }
 
 impl<'a, 'b> PartialEq<Channel<'b>> for Channel<'a> {
-	fn eq(&self, other: &Channel) -> bool {
-		self.data == other.data
+	fn eq(&self, other: &Channel<'b>) -> bool {
+		self.get_server_id() == other.get_server_id() &&
+			self.get_id() == other.get_id()
 	}
 }
 impl<'a> Eq for Channel<'a> {}
-impl<'a> Deref for Channel<'a> {
-	type Target = ChannelData;
-	fn deref(&self) -> &Self::Target {
-		&self.data
-	}
-}
-
-impl<'a> Channel<'a> {
-	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> {
-		Channel {
-			api,
-			data: Cow::Borrowed(data),
-		}
-	}
-
-	fn new_owned(api: &'a TsApi, data: ChannelData) -> Channel<'a> {
-		Channel {
-			api,
-			data: Cow::Owned(data),
-		}
-	}
-}
 
 impl PartialEq<ChannelData> for ChannelData {
 	fn eq(&self, other: &ChannelData) -> bool {
@@ -642,41 +641,75 @@ impl ChannelData {
 	}
 }
 
+impl<'a> Channel<'a> {
+	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> {
+		Channel {
+			api,
+			data: Ok(data),
+		}
+	}
+
+	fn new_owned(api: &'a TsApi, server_id: ServerId, channel_id: ChannelId) -> Channel<'a> {
+		Channel {
+			api,
+			data: Err((server_id, channel_id))
+		}
+	}
+
+	fn get_server_id(&self) -> ServerId {
+		match self.data {
+			Ok(data) => data.get_server_id(),
+			Err((server_id, _)) => server_id,
+		}
+	}
+
+	pub fn get_id(&self) -> ChannelId {
+		match self.data {
+			Ok(data) => data.get_id(),
+			Err((_, channel_id)) => channel_id,
+		}
+	}
+
+	/// Get the server of this channel.
+	pub fn get_server(&self) -> Server<'a> {
+		self.api.get_server_unwrap(self.get_server_id())
+	}
+
+	pub fn get_parent_channel(&self) -> Option<Channel<'a>> {
+		match self.data {
+			Ok(data) => if let Ok(parent_channel_id) = data.get_parent_channel_id() {
+				if parent_channel_id.0 == 0 {
+					None
+				} else {
+					Some(self.get_server().get_channel_unwrap(parent_channel_id))
+				}
+			} else {
+				None
+			}
+			Err(_) => None,
+		}
+	}
+
+	/// The channel properties that are only available on request.
+	pub fn get_optional_data(&self) -> Option<&OptionalChannelData> {
+		self.data.ok().map(|data| &data.optional_data)
+	}
+}
+
 // ********** Connection **********
 #[derive(Clone)]
 pub struct Connection<'a> {
 	api: &'a TsApi,
-	data: Cow<'a, ConnectionData>,
+	data: Result<&'a ConnectionData, (ServerId, ConnectionId)>,
 }
 
 impl<'a, 'b> PartialEq<Connection<'b>> for Connection<'a> {
-	fn eq(&self, other: &Connection) -> bool {
-		self.data == other.data
+	fn eq(&self, other: &Connection<'b>) -> bool {
+		self.get_server_id() == other.get_server_id() &&
+			self.get_id() == other.get_id()
 	}
 }
 impl<'a> Eq for Connection<'a> {}
-impl<'a, 'b> Deref for Connection<'a> {
-	type Target = ConnectionData;
-	fn deref(&self) -> &Self::Target {
-		&self.data
-	}
-}
-
-impl<'a> Connection<'a> {
-	fn new(api: &'a TsApi, data: &'a ConnectionData) -> Connection<'a> {
-		Connection {
-			api,
-			data: Cow::Borrowed(data),
-		}
-	}
-
-	fn new_owned(api: &'a TsApi, data: ConnectionData) -> Connection<'a> {
-		Connection {
-			api,
-			data: Cow::Owned(data),
-		}
-	}
-}
 
 impl PartialEq<ConnectionData> for ConnectionData {
 	fn eq(&self, other: &ConnectionData) -> bool {
@@ -800,9 +833,67 @@ impl ConnectionData {
 }
 
 impl<'a> Connection<'a> {
+	fn new(api: &'a TsApi, data: &'a ConnectionData) -> Connection<'a> {
+		Connection {
+			api,
+			data: Ok(data),
+		}
+	}
+
+	fn new_err(api: &'a TsApi, server_id: ServerId, connection_id: ConnectionId) -> Connection<'a> {
+		Connection {
+			api,
+			data: Err((server_id, connection_id)),
+		}
+	}
+
+	fn get_server_id(&self) -> ServerId {
+		match self.data {
+			Ok(data) => data.get_server_id(),
+			Err((server_id, _)) => server_id,
+		}
+	}
+
+	pub fn get_id(&self) -> ConnectionId {
+		match self.data {
+			Ok(data) => data.get_id(),
+			Err((_, connection_id)) => connection_id,
+		}
+	}
+
 	/// Get the server of this connection.
-	pub fn get_server(&'a self) -> Server<'a> {
+	pub fn get_server(&self) -> Server<'a> {
 		self.api.get_server_unwrap(self.get_server_id())
+	}
+
+	/// Get the channel of this connection.
+	pub fn get_channel(&self) -> Result<Channel<'a>, Error> {
+		match self.data {
+			Ok(data) => data.get_channel_id().map(|c| self.get_server().get_channel_unwrap(c)),
+			Err(_) => Err(Error::Ok),
+		}
+	}
+
+	pub fn get_channel_group_inherited_channel(&self) -> Result<Channel<'a>, Error> {
+		match self.data {
+			Ok(data) => data.get_channel_group_inherited_channel_id().map(|c| self.get_server().get_channel_unwrap(c)),
+			Err(_) => Err(Error::Ok),
+		}
+	}
+
+	/// The connection properties that are only available for our own client.
+	pub fn get_own_data(&self) -> Option<&OwnConnectionData> {
+		self.data.ok().and_then(|data| data.own_data.as_ref())
+	}
+
+	/// The connection properties that are only available for server queries.
+	pub fn get_serverquery_data(&self) -> Option<&ServerqueryConnectionData> {
+		self.data.ok().and_then(|data| data.serverquery_data.as_ref())
+	}
+
+	/// The connection properties that are only available on request.
+	pub fn get_optional_data(&self) -> Option<&OptionalConnectionData> {
+		self.data.ok().map(|data| &data.optional_data)
 	}
 }
 
@@ -964,8 +1055,9 @@ impl TsApi {
 			.unwrap_or_else(|| {
 				// Ignore here, there are too many messages when we are not yet
 				// fully connected (or already disconnected), but sound is sent.
-				// self.log_or_print(format!("Can't find server {:?}\n{:?}", server_id, backtrace::Backtrace::new()), "rust-ts3plugin", ::LogLevel::Warning);
-				Server::<'a>::new_owned(&self, ServerData::new(server_id))
+				// self.log_or_print(format!("Can't find server {:?}\n{:?}",
+				//     server_id, backtrace::Backtrace::new()), "rust-ts3plugin", ::LogLevel::Warning);
+				Server::new_err(&self, server_id)
 			})
 	}
 

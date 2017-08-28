@@ -43,7 +43,7 @@ impl Plugin for MyTsPlugin {
     fn autoload() -> bool { false }
     fn configurable() -> ConfigureOffer { ConfigureOffer::No }
 
-    fn new(api: &mut TsApi) -> Result<Box<MyTsPlugin>, InitError> {
+    fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
         Ok(Box::new(MyTsPlugin))
         // Or return Err(InitError::Failure) on failure
@@ -51,7 +51,7 @@ impl Plugin for MyTsPlugin {
 
     // Implement callbacks here
 
-    fn shutdown(&mut self, api: &mut TsApi) {
+    fn shutdown(&mut self, api: &TsApi) {
         api.log_or_print("Shutdown", "MyTsPlugin", LogLevel::Info);
     }
 }

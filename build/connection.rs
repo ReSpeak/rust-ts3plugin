@@ -53,7 +53,7 @@ pub fn create(f: &mut Write) {
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).finalize(),
-			builder.name("server_id").type_s("ServerId").result(false).getter_public(false).finalize(),
+			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
 			builder_string.name("version").finalize(),
 			builder_string.name("platform").finalize(),
 			builder.name("created").type_s("DateTime<Utc>").finalize(),
@@ -134,16 +134,22 @@ pub fn create(f: &mut Write) {
 			client_b_string.name("badges").finalize(),
 		]).finalize();
 	// The real connection data
-	let connection = StructBuilder::new().name("ConnectionData")
+	let builder = builder.public(false);
+	let client_b = client_b.public(false);
+	let client_b_string = client_b_string.public(false);
+	let connection = StructBuilder::new()
+		.name("ConnectionData")
+		.api_name("Connection")
+		.public(false)
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.extra_initialisation("\
 			let optional_data = OptionalConnectionData::new(server_id, id);\n\
 			let own_data = None;\n\
 			let serverquery_data = None;\n")
 		.properties(vec![
-			builder.name("id").type_s("ConnectionId").result(false).finalize(),
-			builder.name("server_id").type_s("ServerId").result(false).getter_public(false).finalize(),
-			builder.name("channel_id").type_s("ChannelId").update("Self::query_channel_id(self.server_id, self.id)").getter_public(false).finalize(),
+			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
+			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
+			builder.name("channel_id").type_s("ChannelId").update("Self::query_channel_id(self.server_id, self.id)").api_getter(false).finalize(),
 			// ClientProperties
 			client_b_string.name("uid").value_name("UniqueIdentifier").finalize(),
 			client_b_string.name("name").value_name("Nickname").finalize(),
@@ -167,13 +173,13 @@ pub fn create(f: &mut Write) {
 			client_b.name("talk_request").type_s("DateTime<Utc>").finalize(),
 			client_b.name("talk_request_message").type_s("String").value_name("TalkRequestMsg").finalize(),
 
-			client_b.name("channel_group_inherited_channel_id").type_s("ChannelId")
+			client_b.name("channel_group_inherited_channel_id").type_s("ChannelId").api_getter(false)
 				.documentation("The channel that sets the current channel id of this client.").finalize(),
-			client_b.name("own_data").type_s("Option<OwnConnectionData>").result(false)
+			client_b.name("own_data").type_s("Option<OwnConnectionData>").result(false).api_getter(false)
 				.documentation("Only set for oneself").finalize(),
-			client_b.name("serverquery_data").type_s("Option<ServerqueryConnectionData>").result(false)
+			client_b.name("serverquery_data").type_s("Option<ServerqueryConnectionData>").result(false).api_getter(false)
 				.documentation("Only available for serverqueries").finalize(),
-			client_b.name("optional_data").type_s("OptionalConnectionData").result(false).finalize(),
+			client_b.name("optional_data").type_s("OptionalConnectionData").result(false).api_getter(false).finalize(),
 	]).finalize();
 
 	// Structs
@@ -188,6 +194,7 @@ pub fn create(f: &mut Write) {
 	f.write_all(optional_connection_data.create_impl().as_bytes()).unwrap();
 	f.write_all(connection.create_impl().as_bytes()).unwrap();
 	f.write_all(connection.create_update().as_bytes()).unwrap();
+	f.write_all(connection.create_api_impl().as_bytes()).unwrap();
 
 	// Constructors
 	//f.write_all(own_connection_data.create_constructor("id: ClientId", &default_functions, "id, ", "ConnectionProperties").as_bytes()).unwrap();
