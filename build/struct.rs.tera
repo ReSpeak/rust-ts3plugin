@@ -1,0 +1,93 @@
+{% if do_struct %}
+{% if documentation %}
+/// {{ documentation }}
+{% endif %}
+#[derive(Clone)]
+{% if public %}
+pub {% endif %}struct {{ name }} {
+{% for prop in properties %}
+	{% if prop.documentation %}
+	{{ prop.documentation }}
+	{% endif %}
+	{{ prop.name }}: {% if prop.result %}
+Result<{{ prop.type_s }}, ::Error>{% else %}
+{{ prop.type_s }}{% endif %},
+{% endfor %}
+
+{{ extra_attributes | indent(depth=1) }}}
+
+{% endif %}
+{% if do_impl or do_api_impl or do_update or do_constructor %}
+	{% set impl = true %}
+impl {{ name }} {
+{% endif %}
+{% if do_impl %}
+{% for prop in properties %}
+	{% if prop.public %}
+	pub {% else %}
+{{ "	" }}{% endif %}
+fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
+		{{ prop.getter_body }}
+	}
+
+{% endfor %}
+{% endif %}
+{% if do_update %}
+	{% for prop in properties %}
+	{% if prop.update_body %}
+	fn update_{{ prop.name }}(&mut self) {
+		self.{{ prop.name }} = {{ prop.update_body }}
+	}
+	{% endif %}
+	{% endfor %}
+
+	fn update(&mut self) {
+		{% for prop in properties %}
+		{% if prop.update_body %}
+		self.update_{{ prop.name }}();
+		{% endif %}
+		{% endfor %}
+	}
+
+	fn update_from(&mut self, other: &Self) {
+		{% for prop in properties %}
+		{% if prop.result %}
+		if self.{{ prop.name }}.is_err() {
+			self.{{ prop.name }} = other.{{ prop.name }}.clone();
+		}
+		{% endif %}
+		{% endfor %}
+	}
+
+{% endif %}
+{% if do_constructor %}
+	fn new({{ constructor_args }}) -> {{ name }} {
+{{ extra_initialisation | indent(depth=2) }}
+		{{ name }} {
+		{% for prop in properties %}
+			{{ prop.name }}: {{ prop.constructor_body }},
+		{% endfor %}
+
+{{ extra_creation | indent(depth=3) }}
+		}
+	}
+{% endif %}
+{% if impl %}
+}
+
+{% endif %}
+{% if do_api_impl %}
+impl<'a> {{ api_name }}<'a> {
+{% for prop in properties %}
+	{% if prop.api_getter %}
+	pub fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
+		match self.data {
+			Ok(data) => data.get_{{ prop.name }}(),
+			Err(_)   => Err(Error::Ok),
+		}
+	}
+	{% endif %}
+{% endfor %}
+}
+
+{% endif %}

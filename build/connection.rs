@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write) {
+pub fn create(f: &mut Write, tera: &Tera) {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -35,7 +35,11 @@ pub fn create(f: &mut Write) {
 	let client_b_i32 = client_b.type_s("i32");
 	// Own connection data
 	let own_connection_data = StructBuilder::new().name("OwnConnectionData")
+		.constructor_args("server_id: ServerId, id: ConnectionId")
+		.do_update(false) //FIXME
 		.properties(vec![
+			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
+			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
 			builder_string.name("server_ip").finalize(),
 			builder.name("server_port").type_s("u16").finalize(),
 			builder.name("input_deactivated").type_s("InputDeactivationStatus").finalize(),
@@ -44,13 +48,18 @@ pub fn create(f: &mut Write) {
 		]).finalize();
 	// Serverquery connection data
 	let serverquery_connection_data = StructBuilder::new().name("ServerqueryConnectionData")
+		.constructor_args("server_id: ServerId, id: ConnectionId")
+		.do_update(false) //FIXME
 		.properties(vec![
+			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
+			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
 			builder_string.name("name").finalize(),
 			builder_string.name("password").finalize(),
 		]).finalize();
 	// Optional connection data
 	let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
+		.do_update(false) //FIXME
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).finalize(),
 			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
@@ -141,6 +150,7 @@ pub fn create(f: &mut Write) {
 		.name("ConnectionData")
 		.api_name("Connection")
 		.public(false)
+		.do_api_impl(true)
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.extra_initialisation("\
 			let optional_data = OptionalConnectionData::new(server_id, id);\n\
@@ -183,21 +193,8 @@ pub fn create(f: &mut Write) {
 	]).finalize();
 
 	// Structs
-	f.write_all(own_connection_data.create_struct().as_bytes()).unwrap();
-	f.write_all(serverquery_connection_data.create_struct().as_bytes()).unwrap();
-	f.write_all(optional_connection_data.create_struct().as_bytes()).unwrap();
-	f.write_all(connection.create_struct().as_bytes()).unwrap();
-
-	// Implementations
-	f.write_all(own_connection_data.create_impl().as_bytes()).unwrap();
-	f.write_all(serverquery_connection_data.create_impl().as_bytes()).unwrap();
-	f.write_all(optional_connection_data.create_impl().as_bytes()).unwrap();
-	f.write_all(connection.create_impl().as_bytes()).unwrap();
-	f.write_all(connection.create_update().as_bytes()).unwrap();
-	f.write_all(connection.create_api_impl().as_bytes()).unwrap();
-
-	// Constructors
-	//f.write_all(own_connection_data.create_constructor("id: ClientId", &default_functions, "id, ", "ConnectionProperties").as_bytes()).unwrap();
-	f.write_all(connection.create_constructor().as_bytes()).unwrap();
-	f.write_all(optional_connection_data.create_constructor().as_bytes()).unwrap();
+	own_connection_data.create_struct(f, tera).unwrap();
+	serverquery_connection_data.create_struct(f, tera).unwrap();
+	optional_connection_data.create_struct(f, tera).unwrap();
+	connection.create_struct(f, tera).unwrap();
 }

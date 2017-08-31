@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write) {
+pub fn create(f: &mut Write, tera: &Tera) {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -42,6 +42,7 @@ pub fn create(f: &mut Write) {
 		.name("ChannelData")
 		.api_name("Channel")
 		.public(false)
+		.do_api_impl(true)
 		.constructor_args("server_id: ServerId, id: ChannelId")
 		.properties(vec![
 			builder.name("id").type_s("ChannelId").result(false).api_getter(false).finalize(),
@@ -77,15 +78,6 @@ pub fn create(f: &mut Write) {
 		]).finalize();
 
 	// Structs
-	f.write_all(optional_channel_data.create_struct().as_bytes()).unwrap();
-	f.write_all(channel.create_struct().as_bytes()).unwrap();
-
-	// Implementations
-	f.write_all(optional_channel_data.create_impl().as_bytes()).unwrap();
-	f.write_all(optional_channel_data.create_update().as_bytes()).unwrap();
-	f.write_all(optional_channel_data.create_constructor().as_bytes()).unwrap();
-	f.write_all(channel.create_impl().as_bytes()).unwrap();
-	f.write_all(channel.create_update().as_bytes()).unwrap();
-	f.write_all(channel.create_constructor().as_bytes()).unwrap();
-	f.write_all(channel.create_api_impl().as_bytes()).unwrap();
+	optional_channel_data.create_struct(f, tera).unwrap();
+	channel.create_struct(f, tera).unwrap();
 }

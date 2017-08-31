@@ -1,14 +1,39 @@
+#![feature(custom_derive)]
+// Limit for error_chain
+#![recursion_limit = "1024"]
+
+#[macro_use]
+extern crate error_chain;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate skeptic;
+#[macro_use]
+extern crate tera;
 
 use std::borrow::Cow;
 use std::env;
 use std::collections::BTreeMap;
-use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use serde::ser::SerializeStruct;
+use tera::Tera;
+
 type Map<K, V> = BTreeMap<K, V>;
+
+#[allow(unused_doc_comment)]
+mod errors {
+	// Create the Error, ErrorKind, ResultExt, and Result types
+	error_chain! {
+		foreign_links {
+			Io(::std::io::Error);
+			Tera(::tera::Error);
+		}
+	}
+}
+use errors::*;
 
 mod channel;
 mod connection;
@@ -48,22 +73,15 @@ struct Property<'a> {
 }
 
 impl<'a> Property<'a> {
-	fn create_attribute(&self) -> String {
-		let mut s = String::new();
-		if !self.documentation.is_empty() {
-			s.push_str(self.documentation.lines()
-				.map(|l| format!("/// {}\n", l)).collect::<String>().as_str());
-		}
-		if self.result {
-			s.push_str(format!("{}: Result<{}, ::Error>,\n", self.name, self.type_s).as_str());
-		} else {
-			s.push_str(format!("{}: {},\n", self.name, self.type_s).as_str());
-		}
-		s
+	fn is_ref_type(&self) -> bool {
+		["String", "Permissions"].contains(&self.type_s.as_ref())
+			|| self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
+			|| self.type_s.starts_with("Vec<")
 	}
 
-	fn create_return_type(&self, is_ref_type: bool) -> String {
+	fn create_return_type(&self) -> String {
 		// Build the result type
+		let is_ref_type = self.is_ref_type();
 		let mut result_type = String::new();
 		if self.result {
 			result_type .push_str("Result<")
@@ -86,18 +104,8 @@ impl<'a> Property<'a> {
 		result_type
 	}
 
-	fn create_getter(&self) -> String {
-		let is_ref_type = ["String", "Permissions"].contains(&self.type_s.as_ref())
-			|| self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
-			|| self.type_s.starts_with("Vec<");;
-
-		let mut s = String::new();
-		// Create the getter
-		if self.public {
-			s.push_str("pub ");
-		}
-		s.push_str(format!("fn get_{}(&self) -> {} {{\n", self.name, self.create_return_type(is_ref_type)).as_str());
-		s.push_str(indent("", 1).as_str());
+	fn create_getter_body(&self) -> String {
+		let is_ref_type = self.is_ref_type();
 		let mut body = String::new();
 		if !self.result && is_ref_type {
 			body.push('&');
@@ -110,42 +118,20 @@ impl<'a> Property<'a> {
 			}
 			body.push_str(".map_err(|e| *e)");
 		}
-		body.push('\n');
-		s.push_str(indent(body, 1).as_str());
-		s.push_str("}\n");
-		s
+		body
 	}
 
-	fn create_api_getter(&self) -> String {
-		if !self.api_getter {
-			return String::new();
+	fn create_constructor_body(&self) -> String {
+		let p = self.create_initialisation();
+		if p.is_empty() {
+			self.name.clone().into_owned()
+		} else {
+			p
 		}
-		let is_ref_type = ["String", "Permissions"].contains(&self.type_s.as_ref())
-			|| self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
-			|| self.type_s.starts_with("Vec<");;
-
-		let mut s = String::new();
-		// Create the getter
-		s.push_str(format!("pub fn get_{}(&self) -> {} {{\n", self.name, self.create_return_type(is_ref_type)).as_str());
-		s.push_str(indent(format!("\
-			match self.data {{\n\
-				\tOk(data) => data.get_{}(),\n\
-				\tErr(_) => Err(Error::Ok),\n\
-			}}\n", self.name), 1).as_str());
-		s.push_str("}\n");
-		s
 	}
 
-	fn create_update(&self) -> String {
-		let mut s = String::new();
-		let initialisation = self.intern_create_initialisation(self.default_args_update.as_ref(), true);
-		if !initialisation.is_empty() {
-			// Create the update function
-			s.push_str(format!("fn update_{}(&mut self) {{\n", self.name).as_str());
-			s.push_str(indent(format!("self.{} = {};\n", self.name, initialisation), 1).as_str());
-			s.push_str("}\n");
-		}
-		s
+	fn create_update_body(&self) -> String {
+		self.intern_create_initialisation(self.default_args_update.as_ref(), true)
 	}
 
 	fn create_initialisation(&self) -> String {
@@ -223,6 +209,42 @@ impl<'a> Property<'a> {
 			}
 		}
 		s
+	}
+}
+
+impl<'a> serde::Serialize for Property<'a> {
+	fn serialize<S: serde::Serializer>(&self, serializer: S)
+		-> std::result::Result<S::Ok, S::Error> {
+		let mut s = serializer.serialize_struct("Property", 18)?;
+
+		// Attributes
+		s.serialize_field("name", &self.name)?;
+		s.serialize_field("type_s", &self.type_s)?;
+		s.serialize_field("result", &self.result)?;
+		let documentation = self.documentation.lines()
+			.map(|l| format!("/// {}\n", l)).collect::<String>();
+		s.serialize_field("documentation", &documentation)?;
+		s.serialize_field("initialise", &self.initialise)?;
+		s.serialize_field("initialisation", &self.initialisation)?;
+		s.serialize_field("update", &self.update)?;
+		s.serialize_field("should_update", &self.should_update)?;
+		s.serialize_field("method_name", &self.method_name)?;
+		s.serialize_field("enum_name", &self.enum_name)?;
+		s.serialize_field("value_name", &self.value_name)?;
+		s.serialize_field("functions", &self.functions)?;
+		s.serialize_field("transmutable", &self.transmutable)?;
+		s.serialize_field("default_args", &self.default_args)?;
+		s.serialize_field("default_args_update", &self.default_args_update)?;
+		s.serialize_field("api_getter", &self.api_getter)?;
+		s.serialize_field("public", &self.public)?;
+
+		// Extra attributes
+		s.serialize_field("return_type", &self.create_return_type())?;
+		s.serialize_field("getter_body", &self.create_getter_body())?;
+		s.serialize_field("constructor_body", &self.create_constructor_body())?;
+		s.serialize_field("update_body", &self.create_update_body())?;
+
+		s.end()
 	}
 }
 
@@ -384,6 +406,7 @@ impl<'a> PropertyBuilder<'a> {
 	}
 }
 
+#[derive(Serialize)]
 struct Struct<'a> {
 	/// The name of this struct
 	name: Cow<'a, str>,
@@ -403,6 +426,12 @@ struct Struct<'a> {
 	constructor_args: Cow<'a, str>,
 	/// If the resulting struct is public
 	public: bool,
+	// What should be done for this struct
+	do_struct: bool,
+	do_impl: bool,
+	do_api_impl: bool,
+	do_update: bool,
+	do_constructor: bool,
 }
 
 #[derive(Default, Clone)]
@@ -416,12 +445,23 @@ struct StructBuilder<'a> {
 	extra_creation: Cow<'a, str>,
 	constructor_args: Cow<'a, str>,
 	public: bool,
+	do_struct: bool,
+	do_impl: bool,
+	do_api_impl: bool,
+	do_update: bool,
+	do_constructor: bool,
 }
 
+#[allow(dead_code)]
 impl<'a> StructBuilder<'a> {
 	fn new() -> StructBuilder<'a> {
 		let mut result = Self::default();
 		result.public = true;
+		result.do_struct = true;
+		result.do_impl = true;
+		result.do_constructor = true;
+		result.do_update = true;
+		result.do_api_impl = false;
 		result
 	}
 
@@ -479,6 +519,36 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
+	fn do_struct(&mut self, do_struct: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_struct = do_struct;
+		res
+	}
+
+	fn do_impl(&mut self, do_impl: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_impl = do_impl;
+		res
+	}
+
+	fn do_api_impl(&mut self, do_api_impl: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_api_impl = do_api_impl;
+		res
+	}
+
+	fn do_update(&mut self, do_update: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_update = do_update;
+		res
+	}
+
+	fn do_constructor(&mut self, do_constructor: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_constructor = do_constructor;
+		res
+	}
+
 	fn finalize(self) -> Struct<'a> {
 		Struct {
 			name: self.name,
@@ -491,139 +561,53 @@ impl<'a> StructBuilder<'a> {
 			extra_creation: self.extra_creation,
 			constructor_args: self.constructor_args,
 			public: self.public,
+			do_struct: self.do_struct,
+			do_impl: self.do_impl,
+			do_api_impl: self.do_api_impl,
+			do_update: self.do_update,
+			do_constructor: self.do_constructor,
 		}
 	}
 }
 
 impl<'a> Struct<'a> {
-	fn create_struct(&self) -> String {
-		let mut s = String::new();
-		for prop in &self.properties {
-			s.push_str(prop.create_attribute().as_str());
-		}
-		let mut result = String::new();
-		if !self.documentation.is_empty() {
-			result.push_str(format!("/// {}\n", self.documentation).as_str());
-		}
-		result.push_str("#[derive(Clone)]\n");
-		if self.public {
-			result.push_str("pub ");
-		}
-		result.push_str(format!("struct {} {{\n{}", self.name, indent(s, 1)).as_str());
-		if !self.extra_attributes.is_empty() {
-			result.push_str(format!("\n{}", indent(self.extra_attributes.as_ref(), 1)).as_str());
-		}
-		result.push_str("}\n\n");
-		result
-	}
-
-	fn create_impl(&self) -> String {
-		let mut s = String::new();
-		for prop in &self.properties {
-			s.push_str(prop.create_getter().as_str());
-		}
-		let mut result = String::new();
-		write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
-		result
-	}
-
-	fn create_api_impl(&self) -> String {
-		let mut s = String::new();
-		for prop in &self.properties {
-			s.push_str(prop.create_api_getter().as_str());
-		}
-		let mut result = String::new();
-		write!(result, "impl<'a> {}<'a> {{\n{}}}\n\n", self.api_name, indent(s, 1)).unwrap();
-		result
-	}
-
-	fn create_update(&self) -> String {
-		// The content that holds all update methods
-		let mut s = String::new();
-		// The update() method
-		let mut updates = String::new();
-
-		for prop in &self.properties {
-			let update = prop.create_update();
-			if !update.is_empty() {
-				s.push_str(update.as_str());
-				updates.push_str(format!("self.update_{}();\n", prop.name).as_str());
-			}
-		}
-		// Add an update method for everything
-		s.push_str("\nfn update(&mut self) {\n");
-		s.push_str(indent(updates, 1).as_str());
-		s.push_str("}\n");
-
-		// Add update_from
-		let mut updates = String::new();
-		for prop in &self.properties {
-			if prop.result {
-				updates.push_str(format!("if self.{}.is_err() {{\n", prop.name).as_str());
-				updates.push_str(indent(format!("self.{0} = other.{0}.clone();", prop.name), 1).as_str());
-				updates.push_str("}\n");
-			}
-		}
-		s.push_str("fn update_from(&mut self, other: &Self) {\n");
-		s.push_str(indent(updates, 1).as_str());
-		s.push_str("}\n");
-
-		let mut result = String::new();
-		write!(result, "impl {} {{\n{}}}\n\n", self.name, indent(s, 1)).unwrap();
-		result
-	}
-
-	/// struct_name: Name of the struct
-	/// properties_name: Name of the properties enum
-	/// args: Base args (id) to get properties
-	fn create_constructor(&self) -> String {
-		let mut inits = String::new();
-		// Initialisation
-		if !self.extra_initialisation.is_empty() {
-			inits.push_str(self.extra_initialisation.as_ref());
-			inits.push('\n');
-		}
-		// Creation
-		let mut creats = String::new();
-		for prop in &self.properties {
-			let p = prop.create_initialisation();
-			let initialisation = if p.is_empty() {
-				prop.name.clone().into_owned()
-			} else {
-				p
-			};
-			creats.push_str(format!("{}: {},\n", prop.name, initialisation).as_str());
-		}
-		if !self.extra_creation.is_empty() {
-			creats.push('\n');
-			creats.push_str(self.extra_creation.as_ref());
-		}
-
-		let mut result = String::new();
-		write!(result, "impl {0} {{
-	fn new({1}) -> {0} {{
-{2}
-		{0} {{
-{3}
-		}}
-	}}\n}}\n\n", self.name, self.constructor_args, indent(inits, 2), indent(creats, 3)).unwrap();
-		result
+	fn create_struct(&self, f: &mut Write, tera: &Tera) -> Result<()> {
+		let s = tera.render("struct.rs.tera", &self)?;
+		f.write_all(s.as_bytes())?;
+		Ok(())
 	}
 }
 
 /// Build parts of lib.rs as most of the structs are very repetitive
 fn main() {
 	let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-	println!("cargo:rerun-if-changed={}/build/build.rs", manifest_dir);
+	println!("cargo:rerun-if-changed={}/build/*.rs", manifest_dir);
+	println!("cargo:rerun-if-changed={}/build/*.tera", manifest_dir);
 	println!("cargo:rerun-if-changed={}/README.md", manifest_dir);
 
-	let out_dir = env::var("OUT_DIR").unwrap();
-	let dest_path = Path::new(&out_dir).join("structs.rs");
-	let mut f = File::create(&dest_path).unwrap();
+	let mut tera = compile_templates!(format!("{}/build/*.tera", manifest_dir).as_str());
+	tera.register_filter("indent", |value, args| {
+		if let Some(&tera::Value::Number(ref n)) = args.get("depth") {
+			if let tera::Value::String(s) = value {
+				Ok(tera::Value::String(indent(s, n.as_u64().unwrap() as usize)))
+			} else {
+				Err("indent expects a string to filter".into())
+			}
+		} else {
+			Err("Expected argument 'depth' for indent".into())
+		}
+	});
 
-	channel::create(&mut f);
-	connection::create(&mut f);
-	server::create(&mut f);
+	let out_dir = env::var("OUT_DIR").unwrap();
+	let path = Path::new(&out_dir);
+
+	let mut channel_f = File::create(&path.join("channel.rs")).unwrap();
+	let mut connection_f = File::create(&path.join("connection.rs")).unwrap();
+	let mut server_f = File::create(&path.join("server.rs")).unwrap();
+
+	channel::create(&mut channel_f, &tera);
+	connection::create(&mut connection_f, &tera);
+	server::create(&mut server_f, &tera);
 
 	// Create tests for README.md
 	skeptic::generate_doc_tests(&["README.md"]);

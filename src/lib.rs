@@ -84,7 +84,9 @@ pub mod ts3interface;
 pub mod plugin;
 
 // Import automatically generated structs
-include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+include!(concat!(env!("OUT_DIR"), "/channel.rs"));
+include!(concat!(env!("OUT_DIR"), "/connection.rs"));
+include!(concat!(env!("OUT_DIR"), "/server.rs"));
 
 // ******************** Structs ********************
 /// The possible receivers of a message. A message can be sent to a specific

@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write) {
+pub fn create(f: &mut Write, tera: &Tera) {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -22,7 +22,9 @@ pub fn create(f: &mut Write) {
 	let optional_server_data = StructBuilder::new().name("OptionalServerData")
 		.documentation("Server properties that have to be fetched explicitely")
 		.constructor_args("id: ServerId")
+		.do_update(false) //FIXME
 		.properties(vec![
+			builder.name("id").type_s("ServerId").result(false).finalize(),
 			builder_string.name("welcome_message").finalize(),
 			builder_i32.name("max_clients").finalize(),
 			builder_i32.name("clients_online").finalize(),
@@ -68,7 +70,9 @@ pub fn create(f: &mut Write) {
 	// Outdated server data
 	let outdated_server_data = StructBuilder::new().name("OutdatedServerData")
 		.documentation("Server properties that are available at the start but not updated")
+		.constructor_args("id: ServerId")
 		.properties(vec![
+			builder.name("id").type_s("ServerId").result(false).finalize(),
 			builder_string.name("hostmessage").finalize(),
 			builder.name("hostmessage_mode").type_s("HostmessageMode").finalize(),
 		]).finalize();
@@ -80,6 +84,7 @@ pub fn create(f: &mut Write) {
 		.name("ServerData")
 		.api_name("Server")
 		.public(false)
+		.do_api_impl(true)
 		.constructor_args("id: ServerId")
 		.extra_attributes("\
 			outdated_data: OutdatedServerData,\n")
@@ -89,6 +94,7 @@ pub fn create(f: &mut Write) {
 			let hostmessage = Self::get_property_as_string(id, VirtualServerProperties::Hostmessage);\n")
 		.extra_creation("\
 			outdated_data: OutdatedServerData {\n\
+				\tid: id,\n\
 				\thostmessage: hostmessage,\n\
 				\thostmessage_mode: hostmessage_mode,\n\
 			},\n")
@@ -126,24 +132,15 @@ pub fn create(f: &mut Write) {
 		]).finalize();
 
 	// Structs
-	f.write_all(optional_server_data.create_struct().as_bytes()).unwrap();
-	f.write_all(outdated_server_data.create_struct().as_bytes()).unwrap();
-	f.write_all(server.create_struct().as_bytes()).unwrap();
+	optional_server_data.create_struct(f, tera).unwrap();
+	outdated_server_data.create_struct(f, tera).unwrap();
+	server.create_struct(f, tera).unwrap();
 
 	// Implementations
-	f.write_all(optional_server_data.create_impl().as_bytes()).unwrap();
-	f.write_all(outdated_server_data.create_impl().as_bytes()).unwrap();
-	f.write_all(server.create_impl().as_bytes()).unwrap();
 	f.write_all("\
 impl ServerData {
 	fn get_outdated_data(&self) -> &OutdatedServerData {
 		&self.outdated_data
 	}
 }\n\n".as_bytes()).unwrap();
-	f.write_all(server.create_update().as_bytes()).unwrap();
-	f.write_all(server.create_api_impl().as_bytes()).unwrap();
-
-	// Initialize variables
-	f.write_all(server.create_constructor().as_bytes()).unwrap();
-	f.write_all(optional_server_data.create_constructor().as_bytes()).unwrap();
 }
