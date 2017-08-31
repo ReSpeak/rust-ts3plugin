@@ -26,7 +26,6 @@ pub fn create(f: &mut Write, tera: &Tera) {
 		.default_args_update("self.server_id, self.id, ")
 		.enum_name("ConnectionProperties");
 	let builder_string = builder.type_s("String");
-	let builder_i32 = builder.type_s("i32");
 	let builder_u64 = builder.type_s("u64");
 
 	let client_b = builder.enum_name("ClientProperties")
@@ -36,44 +35,42 @@ pub fn create(f: &mut Write, tera: &Tera) {
 	// Own connection data
 	let own_connection_data = StructBuilder::new().name("OwnConnectionData")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
-		.do_update(false) //FIXME
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
 			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
 			builder_string.name("server_ip").finalize(),
 			builder.name("server_port").type_s("u16").finalize(),
-			builder.name("input_deactivated").type_s("InputDeactivationStatus").finalize(),
-			builder.name("default_channel").type_s("ChannelId").finalize(),
-			builder_string.name("default_token").finalize(),
+			client_b.name("input_deactivated").type_s("InputDeactivationStatus").finalize(),
+			client_b.name("default_channel").type_s("ChannelId").finalize(),
+			client_b_string.name("default_token").finalize(),
 		]).finalize();
 	// Serverquery connection data
 	let serverquery_connection_data = StructBuilder::new().name("ServerqueryConnectionData")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
-		.do_update(false) //FIXME
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
 			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
-			builder_string.name("name").finalize(),
-			builder_string.name("password").finalize(),
+			client_b_string.name("name").value_name("LoginName").finalize(),
+			client_b_string.name("password").value_name("LoginPassword").finalize(),
 		]).finalize();
 	// Optional connection data
 	let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
-		.do_update(false) //FIXME
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).finalize(),
 			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
-			builder_string.name("version").finalize(),
-			builder_string.name("platform").finalize(),
-			builder.name("created").type_s("DateTime<Utc>").finalize(),
-			builder.name("last_connected").type_s("DateTime<Utc>").finalize(),
-			builder_i32.name("total_connection").finalize(),
+			client_b_string.name("version").finalize(),
+			client_b_string.name("platform").finalize(),
+			client_b.name("created").type_s("DateTime<Utc>").finalize(),
+			client_b.name("last_connected").type_s("DateTime<Utc>").value_name("Lastconnected").finalize(),
+			client_b_i32.name("total_connections").value_name("Totalconnections").finalize(),
 			builder.name("ping").type_s("Duration").finalize(),
 			builder.name("ping_deviation").type_s("Duration").finalize(),
 			builder.name("connected_time").type_s("Duration").finalize(),
 			builder.name("idle_time").type_s("Duration").finalize(),
 			builder_string.name("client_ip").finalize(),
-			builder.name("client_port").type_s("u16").update("Self::get_connection_property_as_uint64(server_id, id, ConnectionProperties::ClientPort) as u16").finalize(),
+			builder.name("client_port").type_s("u16")
+				.update("ConnectionData::get_connection_property_as_uint64(self.server_id, self.id, ConnectionProperties::ClientPort).map(|p| p as u16)").finalize(),
 			// Network
 			builder_u64.name("packets_sent_speech").finalize(),
 			builder_u64.name("packets_sent_keepalive").finalize(),
@@ -120,10 +117,10 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			builder_u64.name("bandwidth_received_last_minute_control").finalize(),
 			builder_u64.name("bandwidth_received_last_minute_total").finalize(),
 			// End network
-			builder_i32.name("month_bytes_uploaded").finalize(),
-			builder_i32.name("month_bytes_downloaded").finalize(),
-			builder_i32.name("total_bytes_uploaded").finalize(),
-			builder_i32.name("total_bytes_downloaded").finalize(),
+			client_b_i32.name("month_bytes_uploaded").finalize(),
+			client_b_i32.name("month_bytes_downloaded").finalize(),
+			client_b_i32.name("total_bytes_uploaded").finalize(),
+			client_b_i32.name("total_bytes_downloaded").finalize(),
 
 			client_b_string.name("default_channel_password").finalize(),
 			client_b_string.name("server_password").finalize(),

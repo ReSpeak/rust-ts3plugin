@@ -7,8 +7,7 @@
 pub {% endif %}struct {{ name }} {
 {% for prop in properties %}
 	{% if prop.documentation %}
-	{{ prop.documentation }}
-	{% endif %}
+	{{ prop.documentation }}{% endif %}
 	{{ prop.name }}: {% if prop.result %}
 Result<{{ prop.type_s }}, ::Error>{% else %}
 {{ prop.type_s }}{% endif %},
@@ -29,8 +28,8 @@ impl {{ name }} {
 fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 		{{ prop.getter_body }}
 	}
-
 {% endfor %}
+
 {% endif %}
 {% if do_update %}
 	{% for prop in properties %}
@@ -89,5 +88,4 @@ impl<'a> {{ api_name }}<'a> {
 	{% endif %}
 {% endfor %}
 }
-
 {% endif %}
