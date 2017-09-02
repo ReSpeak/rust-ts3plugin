@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write, tera: &Tera) {
+pub(crate) fn create() -> Vec<Struct<'static>> {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -19,7 +19,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 	let builder_string = builder.type_s("String");
 	let builder_i32 = builder.type_s("i32");
 	// Optional server data
-	let optional_server_data = StructBuilder::new().name("OptionalServerData")
+	let optional_server_data = StructBuilder::new()
+		.name("OptionalServerData")
+		.api_name("Server")
 		.documentation("Server properties that have to be fetched explicitely")
 		.constructor_args("id: ServerId")
 		.do_update(false) //FIXME
@@ -68,7 +70,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			builder.name("weblist_enabled").type_s("bool").finalize(),
 		]).finalize();
 	// Outdated server data
-	let outdated_server_data = StructBuilder::new().name("OutdatedServerData")
+	let outdated_server_data = StructBuilder::new()
+		.name("OutdatedServerData")
+		.api_name("Server")
 		.documentation("Server properties that are available at the start but not updated")
 		.constructor_args("id: ServerId")
 		.properties(vec![
@@ -85,6 +89,7 @@ pub fn create(f: &mut Write, tera: &Tera) {
 		.api_name("Server")
 		.public(false)
 		.do_api_impl(true)
+		.do_properties(true)
 		.constructor_args("id: ServerId")
 		.extra_attributes("\
 			outdated_data: OutdatedServerData,\n")
@@ -98,6 +103,10 @@ pub fn create(f: &mut Write, tera: &Tera) {
 				\thostmessage: hostmessage,\n\
 				\thostmessage_mode: hostmessage_mode,\n\
 			},\n")
+		.extra_implementation("\
+			fn get_outdated_data(&self) -> &OutdatedServerData {\n\
+				\t&self.outdated_data\n\
+			}\n")
 		.properties(vec![
 			builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).api_getter(false).finalize(),
 			builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
@@ -131,16 +140,5 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			builder.name("optional_data").type_s("OptionalServerData").result(false).initialisation("OptionalServerData::new(id)").update("OptionalServerData::new(self.id)").api_getter(false).finalize(),
 		]).finalize();
 
-	// Structs
-	optional_server_data.create_struct(f, tera).unwrap();
-	outdated_server_data.create_struct(f, tera).unwrap();
-	server.create_struct(f, tera).unwrap();
-
-	// Implementations
-	f.write_all("\
-impl ServerData {
-	fn get_outdated_data(&self) -> &OutdatedServerData {
-		&self.outdated_data
-	}
-}\n\n".as_bytes()).unwrap();
+	vec![optional_server_data, outdated_server_data, server]
 }

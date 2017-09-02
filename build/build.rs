@@ -1,12 +1,9 @@
-#![feature(custom_derive)]
 // Limit for error_chain
 #![recursion_limit = "1024"]
 
 #[macro_use]
 extern crate error_chain;
 extern crate serde;
-#[macro_use]
-extern crate serde_derive;
 extern crate skeptic;
 #[macro_use]
 extern crate tera;
@@ -29,6 +26,7 @@ mod errors {
 	error_chain! {
 		foreign_links {
 			Io(::std::io::Error);
+			EnvVar(::std::env::VarError);
 			Tera(::tera::Error);
 		}
 	}
@@ -96,10 +94,22 @@ impl<'a> Property<'a> {
 		}
 		if self.result {
 			result_type.push_str(", ");
-			if is_ref_type {
-				//result_type.push('&');
-			}
 			result_type.push_str("::Error>");
+		}
+		result_type
+	}
+
+	fn create_ref_type(&self) -> String {
+		// Build the result type
+		let is_ref_type = self.is_ref_type();
+		let mut result_type = String::new();
+		if is_ref_type {
+			result_type.push_str("&'a ");
+		}
+		if self.type_s == "String" {
+			result_type.push_str("str");
+		} else {
+			result_type.push_str(self.type_s.as_ref());
 		}
 		result_type
 	}
@@ -215,7 +225,7 @@ impl<'a> Property<'a> {
 impl<'a> serde::Serialize for Property<'a> {
 	fn serialize<S: serde::Serializer>(&self, serializer: S)
 		-> std::result::Result<S::Ok, S::Error> {
-		let mut s = serializer.serialize_struct("Property", 18)?;
+		let mut s = serializer.serialize_struct("Property", 21)?;
 
 		// Attributes
 		s.serialize_field("name", &self.name)?;
@@ -406,7 +416,6 @@ impl<'a> PropertyBuilder<'a> {
 	}
 }
 
-#[derive(Serialize)]
 struct Struct<'a> {
 	/// The name of this struct
 	name: Cow<'a, str>,
@@ -422,6 +431,8 @@ struct Struct<'a> {
 	extra_initialisation: Cow<'a, str>,
 	/// Code that will be inserted into the creation of the struct
 	extra_creation: Cow<'a, str>,
+	/// Code that will be inserted into the Implementation of the struct
+	extra_implementation: Cow<'a, str>,
 	/// Arguments that are taken by the constructor
 	constructor_args: Cow<'a, str>,
 	/// If the resulting struct is public
@@ -432,6 +443,7 @@ struct Struct<'a> {
 	do_api_impl: bool,
 	do_update: bool,
 	do_constructor: bool,
+	do_properties: bool,
 }
 
 #[derive(Default, Clone)]
@@ -443,6 +455,7 @@ struct StructBuilder<'a> {
 	extra_attributes: Cow<'a, str>,
 	extra_initialisation: Cow<'a, str>,
 	extra_creation: Cow<'a, str>,
+	extra_implementation: Cow<'a, str>,
 	constructor_args: Cow<'a, str>,
 	public: bool,
 	do_struct: bool,
@@ -450,6 +463,7 @@ struct StructBuilder<'a> {
 	do_api_impl: bool,
 	do_update: bool,
 	do_constructor: bool,
+	do_properties: bool,
 }
 
 #[allow(dead_code)]
@@ -507,6 +521,12 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
+	fn extra_implementation<S: Into<Cow<'a, str>>>(&mut self, extra_implementation: S) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.extra_implementation = extra_implementation.into();
+		res
+	}
+
 	fn constructor_args<S: Into<Cow<'a, str>>>(&mut self, constructor_args: S) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.constructor_args = constructor_args.into();
@@ -549,6 +569,12 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
+	fn do_properties(&mut self, do_properties: bool) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.do_properties = do_properties;
+		res
+	}
+
 	fn finalize(self) -> Struct<'a> {
 		Struct {
 			name: self.name,
@@ -559,6 +585,7 @@ impl<'a> StructBuilder<'a> {
 			extra_attributes: self.extra_attributes,
 			extra_initialisation: self.extra_initialisation,
 			extra_creation: self.extra_creation,
+			extra_implementation: self.extra_implementation,
 			constructor_args: self.constructor_args,
 			public: self.public,
 			do_struct: self.do_struct,
@@ -566,21 +593,93 @@ impl<'a> StructBuilder<'a> {
 			do_api_impl: self.do_api_impl,
 			do_update: self.do_update,
 			do_constructor: self.do_constructor,
+			do_properties: self.do_properties,
 		}
 	}
 }
 
 impl<'a> Struct<'a> {
-	fn create_struct(&self, f: &mut Write, tera: &Tera) -> Result<()> {
-		let s = tera.render("struct.rs.tera", &self)?;
+	fn create_struct(&self, f: &mut Write, tera: &Tera, all_structs: &[&Struct<'static>]) -> Result<()> {
+		let mut context = tera::Context::new();
+		context.add("s", &self);
+		context.add("all_structs", &all_structs);
+
+		// Assemble properties
+		let mut properties = Vec::<&Property<'static>>::new();
+		for s in all_structs.iter().filter(|s| s.api_name == self.api_name) {
+			for p in &s.properties {
+				if properties.iter().all(|p2| p.name != p2.name) {
+					properties.push(p);
+				}
+			}
+		}
+		context.add("properties", &properties);
+
+		// Assemble property_types
+		let mut property_types = Vec::<(_, _)>::new();
+		for s in all_structs.iter().filter(|s| s.api_name == self.api_name) {
+			for p in &s.properties {
+				let t = p.type_s.to_string();
+				if property_types.iter().all(|p| p.0 != t) {
+					property_types.push((t, p.create_ref_type()));
+				}
+			}
+		}
+		context.add("property_types", &property_types);
+
+		let s = tera.render("struct.rs.tera", &context)?;
 		f.write_all(s.as_bytes())?;
 		Ok(())
+	}
+
+	fn create_property_types(&self) -> Vec<String> {
+		let mut res = Vec::<String>::new();
+		for p in &self.properties {
+			let t = p.type_s.to_string();
+			if !res.contains(&t) {
+				res.push(t);
+			}
+		}
+		res
+	}
+}
+
+impl<'a> serde::Serialize for Struct<'a> {
+	fn serialize<S: serde::Serializer>(&self, serializer: S)
+		-> std::result::Result<S::Ok, S::Error> {
+		let mut s = serializer.serialize_struct("Struct", 17)?;
+
+		// Attributes
+		s.serialize_field("name", &self.name)?;
+		s.serialize_field("api_name", &self.api_name)?;
+		let documentation = self.documentation.lines()
+			.map(|l| format!("/// {}\n", l)).collect::<String>();
+		s.serialize_field("documentation", &documentation)?;
+		s.serialize_field("properties", &self.properties)?;
+		s.serialize_field("extra_attributes", &self.extra_attributes)?;
+		s.serialize_field("extra_initialisation", &self.extra_initialisation)?;
+		s.serialize_field("extra_creation", &self.extra_creation)?;
+		s.serialize_field("extra_implementation", &self.extra_implementation)?;
+		s.serialize_field("constructor_args", &self.constructor_args)?;
+		s.serialize_field("public", &self.public)?;
+		s.serialize_field("do_struct", &self.do_struct)?;
+		s.serialize_field("do_impl", &self.do_impl)?;
+		s.serialize_field("do_api_impl", &self.do_api_impl)?;
+		s.serialize_field("do_update", &self.do_update)?;
+		s.serialize_field("do_constructor", &self.do_constructor)?;
+		s.serialize_field("do_properties", &self.do_properties)?;
+
+		// Extra attributes
+		s.serialize_field("property_types", &self.create_property_types())?;
+
+		s.end()
 	}
 }
 
 /// Build parts of lib.rs as most of the structs are very repetitive
-fn main() {
-	let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+quick_main!(|| -> Result<()> {
+	let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
+	let out_dir = env::var("OUT_DIR")?;
 	println!("cargo:rerun-if-changed={}/build/*.rs", manifest_dir);
 	println!("cargo:rerun-if-changed={}/build/*.tera", manifest_dir);
 	println!("cargo:rerun-if-changed={}/README.md", manifest_dir);
@@ -589,7 +688,11 @@ fn main() {
 	tera.register_filter("indent", |value, args| {
 		if let Some(&tera::Value::Number(ref n)) = args.get("depth") {
 			if let tera::Value::String(s) = value {
-				Ok(tera::Value::String(indent(s, n.as_u64().unwrap() as usize)))
+				if let Some(n) = n.as_u64() {
+					Ok(tera::Value::String(indent(s, n as usize)))
+				} else {
+					Err("the indent depth must be a number".into())
+				}
 			} else {
 				Err("indent expects a string to filter".into())
 			}
@@ -597,21 +700,51 @@ fn main() {
 			Err("Expected argument 'depth' for indent".into())
 		}
 	});
+	tera.register_filter("title", |value, _| {
+		if let tera::Value::String(s) = value {
+			Ok(tera::Value::String(to_pascal_case(s)))
+		} else {
+			Err("title expects a string to filter".into())
+		}
+	});
+	tera.register_filter("simplify", |value, _| {
+		if let tera::Value::String(s) = value {
+			Ok(tera::Value::String(s.replace(&['<', '>', ',', ' '] as &[char], "")))
+		} else {
+			Err("title expects a string to filter".into())
+		}
+	});
 
-	let out_dir = env::var("OUT_DIR").unwrap();
 	let path = Path::new(&out_dir);
 
-	let mut channel_f = File::create(&path.join("channel.rs")).unwrap();
-	let mut connection_f = File::create(&path.join("connection.rs")).unwrap();
-	let mut server_f = File::create(&path.join("server.rs")).unwrap();
+	let channel_f = File::create(&path.join("channel.rs"))?;
+	let connection_f = File::create(&path.join("connection.rs"))?;
+	let server_f = File::create(&path.join("server.rs"))?;
 
-	channel::create(&mut channel_f, &tera);
-	connection::create(&mut connection_f, &tera);
-	server::create(&mut server_f, &tera);
+	let mut files = vec![channel_f, connection_f, server_f];
+	let structs = vec![
+		channel::create(),
+		connection::create(),
+		server::create(),
+	];
+
+	let mut all_structs = Vec::new();
+	for s in &structs {
+		all_structs.extend(s);
+	}
+
+	for (i, ss) in structs.iter().enumerate() {
+		let f = &mut files[i];
+		for s in ss {
+			s.create_struct(f, &tera, all_structs.as_slice())?;
+		}
+	}
 
 	// Create tests for README.md
 	skeptic::generate_doc_tests(&["README.md"]);
-}
+
+	Ok(())
+});
 
 fn to_pascal_case<S: AsRef<str>>(text: S) -> String {
 	let sref = text.as_ref();

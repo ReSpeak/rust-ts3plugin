@@ -40,6 +40,7 @@
 //! # fn main() { }
 //! ```
 
+// TODO This should be removed at some time, when more code is ready
 #![allow(dead_code)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
@@ -99,7 +100,7 @@ pub enum MessageReceiver {
 }
 
 /// Permissions - TODO not yet implemented
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Permissions;
 
 /// A wrapper for a server id.
@@ -1027,7 +1028,7 @@ impl TsApi {
 	/// be filled and the max lenght of the buffer.
 	fn get_path<F: Fn(*mut c_char, usize)>(fun: F) -> String {
 		const START_SIZE: usize = 512;
-		const MAX_SIZE: usize = 1_000_000;
+		const MAX_SIZE: usize = 100_000;
 		let mut size = START_SIZE;
 		loop {
 			let mut buf = vec![0 as u8; size];
@@ -1035,6 +1036,9 @@ impl TsApi {
 			// Test if the allocated buffer was long enough
 			if buf[size - 3] != 0 {
 				size *= 2;
+				if size > MAX_SIZE {
+					return String::new();
+				}
 			} else {
 				// Be sure that the string is terminated
 				buf[size - 1] = 0;

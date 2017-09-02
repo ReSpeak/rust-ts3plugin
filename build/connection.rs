@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write, tera: &Tera) {
+pub(crate) fn create() -> Vec<Struct<'static>> {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -33,7 +33,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 	let client_b_string = client_b.type_s("String");
 	let client_b_i32 = client_b.type_s("i32");
 	// Own connection data
-	let own_connection_data = StructBuilder::new().name("OwnConnectionData")
+	let own_connection_data = StructBuilder::new()
+		.name("OwnConnectionData")
+		.api_name("Connection")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
@@ -45,7 +47,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			client_b_string.name("default_token").finalize(),
 		]).finalize();
 	// Serverquery connection data
-	let serverquery_connection_data = StructBuilder::new().name("ServerqueryConnectionData")
+	let serverquery_connection_data = StructBuilder::new()
+		.name("ServerqueryConnectionData")
+		.api_name("Connection")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
@@ -54,7 +58,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			client_b_string.name("password").value_name("LoginPassword").finalize(),
 		]).finalize();
 	// Optional connection data
-	let optional_connection_data = StructBuilder::new().name("OptionalConnectionData")
+	let optional_connection_data = StructBuilder::new()
+		.name("OptionalConnectionData")
+		.api_name("Connection")
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).finalize(),
@@ -139,6 +145,7 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			client_b_string.name("country").finalize(),
 			client_b_string.name("badges").finalize(),
 		]).finalize();
+
 	// The real connection data
 	let builder = builder.public(false);
 	let client_b = client_b.public(false);
@@ -148,6 +155,7 @@ pub fn create(f: &mut Write, tera: &Tera) {
 		.api_name("Connection")
 		.public(false)
 		.do_api_impl(true)
+		.do_properties(true)
 		.constructor_args("server_id: ServerId, id: ConnectionId")
 		.extra_initialisation("\
 			let optional_data = OptionalConnectionData::new(server_id, id);\n\
@@ -189,9 +197,6 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			client_b.name("optional_data").type_s("OptionalConnectionData").result(false).api_getter(false).finalize(),
 	]).finalize();
 
-	// Structs
-	own_connection_data.create_struct(f, tera).unwrap();
-	serverquery_connection_data.create_struct(f, tera).unwrap();
-	optional_connection_data.create_struct(f, tera).unwrap();
-	connection.create_struct(f, tera).unwrap();
+	vec![own_connection_data, serverquery_connection_data,
+		optional_connection_data, connection]
 }

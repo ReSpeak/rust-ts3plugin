@@ -1,6 +1,6 @@
 use ::*;
 
-pub fn create(f: &mut Write, tera: &Tera) {
+pub(crate) fn create() -> Vec<Struct<'static>> {
 	// Map types to functions that will get that type
 	let default_functions = {
 		let mut m = Map::new();
@@ -25,7 +25,9 @@ pub fn create(f: &mut Write, tera: &Tera) {
 		.default_args_update("self.server_id, self.channel_id, ");
 
 	// Optional channel data
-	let optional_channel_data = StructBuilder::new().name("OptionalChannelData")
+	let optional_channel_data = StructBuilder::new()
+		.name("OptionalChannelData")
+		.api_name("Channel")
 		.documentation("Channel properties that have to be fetched explicitely")
 		.constructor_args("server_id: ServerId, channel_id: ChannelId")
 		.properties(vec![
@@ -43,6 +45,7 @@ pub fn create(f: &mut Write, tera: &Tera) {
 		.api_name("Channel")
 		.public(false)
 		.do_api_impl(true)
+		.do_properties(true)
 		.constructor_args("server_id: ServerId, id: ChannelId")
 		.properties(vec![
 			builder.name("id").type_s("ChannelId").result(false).api_getter(false).finalize(),
@@ -77,7 +80,5 @@ pub fn create(f: &mut Write, tera: &Tera) {
 			builder.name("optional_data").type_s("OptionalChannelData").initialisation("OptionalChannelData::new(server_id, id)").update("OptionalChannelData::new(self.server_id, self.id)").result(false).api_getter(false).finalize(),
 		]).finalize();
 
-	// Structs
-	optional_channel_data.create_struct(f, tera).unwrap();
-	channel.create_struct(f, tera).unwrap();
+	vec![optional_channel_data, channel]
 }

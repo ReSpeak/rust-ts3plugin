@@ -1,11 +1,11 @@
-{% if do_struct %}
-{% if documentation %}
-/// {{ documentation }}
+{% if s.do_struct %}
+{% if s.documentation %}
+/// {{ s.documentation }}
 {% endif %}
-#[derive(Clone)]
-{% if public %}
-pub {% endif %}struct {{ name }} {
-{% for prop in properties %}
+#[derive(Debug, Clone)]
+{% if s.public %}
+pub {% endif %}struct {{ s.name }} {
+{% for prop in s.properties %}
 	{% if prop.documentation %}
 	{{ prop.documentation }}{% endif %}
 	{{ prop.name }}: {% if prop.result %}
@@ -13,26 +13,25 @@ Result<{{ prop.type_s }}, ::Error>{% else %}
 {{ prop.type_s }}{% endif %},
 {% endfor %}
 
-{{ extra_attributes | indent(depth=1) }}}
+{{ s.extra_attributes | indent(depth=1) }}}
 
 {% endif %}
-{% if do_impl or do_api_impl or do_update or do_constructor %}
+{% if s.do_impl or s.do_api_impl or s.do_update or s.do_constructor or s.extra_implementation %}
 	{% set impl = true %}
-impl {{ name }} {
+impl {{ s.name }} {
 {% endif %}
-{% if do_impl %}
-{% for prop in properties %}
+{% if s.do_impl %}
+{% for prop in s.properties %}
 	{% if prop.public %}
-	pub {% else %}
-{{ "	" }}{% endif %}
+	pub {% else %}	{% endif %}
 fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 		{{ prop.getter_body }}
 	}
 {% endfor %}
 
 {% endif %}
-{% if do_update %}
-	{% for prop in properties %}
+{% if s.do_update %}
+	{% for prop in s.properties %}
 	{% if prop.update_body %}
 	fn update_{{ prop.name }}(&mut self) {
 		self.{{ prop.name }} = {{ prop.update_body }}
@@ -41,7 +40,7 @@ fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 	{% endfor %}
 
 	fn update(&mut self) {
-		{% for prop in properties %}
+		{% for prop in s.properties %}
 		{% if prop.update_body %}
 		self.update_{{ prop.name }}();
 		{% endif %}
@@ -49,7 +48,7 @@ fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 	}
 
 	fn update_from(&mut self, other: &Self) {
-		{% for prop in properties %}
+		{% for prop in s.properties %}
 		{% if prop.result %}
 		if self.{{ prop.name }}.is_err() {
 			self.{{ prop.name }} = other.{{ prop.name }}.clone();
@@ -59,25 +58,50 @@ fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 	}
 
 {% endif %}
-{% if do_constructor %}
-	fn new({{ constructor_args }}) -> {{ name }} {
-{{ extra_initialisation | indent(depth=2) }}
-		{{ name }} {
-		{% for prop in properties %}
+{% if s.do_constructor %}
+	fn new({{ s.constructor_args }}) -> {{ s.name }} {
+{{ s.extra_initialisation | indent(depth=2) }}
+		{{ s.name }} {
+		{% for prop in s.properties %}
 			{{ prop.name }}: {{ prop.constructor_body }},
 		{% endfor %}
 
-{{ extra_creation | indent(depth=3) }}
+{{ s.extra_creation | indent(depth=3) }}
 		}
 	}
-{% endif %}
-{% if impl %}
-}
 
 {% endif %}
-{% if do_api_impl %}
-impl<'a> {{ api_name }}<'a> {
-{% for prop in properties %}
+{% if s.do_impl %}
+{% if s.do_properties %}
+	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property> {
+		let mut v = vec![
+			{% for prop in s.properties %}
+			{{ s.api_name }}Property {
+				property: {{ s.api_name }}PropertyList::{{ prop.name | simplify  | title }},
+			{% if prop.result %}
+				data: self.get_{{ prop.name }}().map(|p| {{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(p)),
+			{% else %}
+				data: Ok({{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(self.get_{{ prop.name }}())),
+			{% endif %}
+			},
+			{% endfor %}
+		];
+		v.retain(|p| if let Err(Error::Ok) = p.data {
+			false
+		} else {
+			true
+		});
+		v
+	}
+
+{% endif %}
+{% if impl %}
+{{ s.extra_implementation | indent(depth=1) }}}
+
+{% endif %}
+{% if s.do_api_impl %}
+impl<'a> {{ s.api_name }}<'a> {
+{% for prop in s.properties %}
 	{% if prop.api_getter %}
 	pub fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 		match self.data {
@@ -87,5 +111,27 @@ impl<'a> {{ api_name }}<'a> {
 	}
 	{% endif %}
 {% endfor %}
+}
+
+{% endif %}
+{% if s.do_properties %}
+#[derive(Debug, Clone)]
+pub enum {{ s.api_name }}PropertyType<'a> {
+{% for t in property_types %}
+	{{ t.0 | simplify | title }}({{ t.1 }}),
+{% endfor %}
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum {{ s.api_name }}PropertyList {
+{% for prop in properties %}
+	{{ prop.name | title }},
+{% endfor %}
+}
+
+#[derive(Debug, Clone)]
+pub struct {{ s.api_name }}Property<'a> {
+	property: {{ s.api_name }}PropertyList,
+	data: Result<{{ s.api_name }}PropertyType<'a>, Error>,
 }
 {% endif %}

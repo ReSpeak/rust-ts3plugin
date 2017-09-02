@@ -32,7 +32,6 @@ ts3plugin-sys = "0.3"
 [build-dependencies]
 error-chain = "0.10"
 serde = "1"
-serde_derive = "1"
 skeptic = "0.6"
 #tera = "0.10"
 tera = { path = "../tera" }
