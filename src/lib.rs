@@ -1,4 +1,32 @@
-//! A crate to create TeamSpeak3 plugins.
+//! TeamSpeak 3.1 updates the plugin api version from 20 to 21.
+//! Version 0.2 of this crate and above are compatible with the api version 21
+//! while version 0.1 is compatible with the api version 20.
+//!
+//! Breaking changes will happen from time to time, leading to a minor version
+//! bump (rust semver).
+//!
+//! At the moment, not all methods that are exposed by the TeamSpeak API are
+//! available for plugins. If a method that you need is missing, please file an
+//! issue or open a pull request.
+//!
+//! # Usage
+//!
+//! Add the following to your `Cargo.toml`:
+//!
+//! ```toml
+//! [package]
+//! name = "<pluginname>"
+//! version = "<version>"
+//! authors = ["<your name>"]
+//! description = "<description>"
+//!
+//! [lib]
+//! name = "<pluginname>"
+//! crate-type = ["cdylib"]
+//!
+//! [dependencies]
+//! ts3plugin = "0.3"
+//! ```
 //!
 //! # Example
 //!
@@ -13,15 +41,13 @@
 //! struct MyTsPlugin;
 //!
 //! impl Plugin for MyTsPlugin {
+//!     // The default name is the crate name, but we can overwrite it here.
 //!     fn name()        -> String { String::from("My Ts Plugin") }
-//!     fn version()     -> String { String::from("0.1.0") }
-//!     fn author()      -> String { String::from("My Name") }
-//!     fn description() -> String { String::from("A wonderful tiny example plugin") }
-//!     // Optional
 //!     fn command() -> Option<String> { Some(String::from("myplugin")) }
 //!     fn autoload() -> bool { false }
 //!     fn configurable() -> ConfigureOffer { ConfigureOffer::No }
 //!
+//!     // The only required method
 //!     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
 //!         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
 //!         Ok(Box::new(MyTsPlugin))
@@ -60,6 +86,7 @@ pub use plugin::*;
 
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
+use std::fmt;
 use std::mem::transmute;
 use std::ops::Deref;
 use std::os::raw::{c_char, c_int};
@@ -100,7 +127,7 @@ pub enum MessageReceiver {
 }
 
 /// Permissions - TODO not yet implemented
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Permissions;
 
 /// A wrapper for a server id.
@@ -137,7 +164,7 @@ pub struct ChannelGroupId(u64);
 // ******************** Implementation ********************
 
 // ********** Invoker **********
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 pub struct InvokerData {
 	id: ConnectionId,
 	uid: String,
@@ -177,7 +204,7 @@ impl InvokerData {
 
 /// The invoker is maybe not visible to the user, but we can get events caused
 /// by him, so some information about him are passed along with his id.
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 pub struct Invoker<'a> {
 	server: Server<'a>,
 	data: InvokerData,
@@ -221,6 +248,11 @@ impl<'a, 'b> PartialEq<Server<'b>> for Server<'a> {
 	}
 }
 impl<'a> Eq for Server<'a> {}
+impl<'a> fmt::Debug for Server<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Server({})", self.get_id().0)
+	}
+}
 
 impl PartialEq<ServerData> for ServerData {
 	fn eq(&self, other: &ServerData) -> bool {
@@ -449,10 +481,10 @@ impl<'a> Server<'a> {
 
 	// ********** Public Interface **********
 
-	/// The server properties that are only available on request.
+	/*/// The server properties that are only available on request.
 	pub fn get_optional_data(&self) -> Option<&OptionalServerData> {
 		self.data.ok().map(|data| &data.optional_data)
-	}
+	}*/
 
 	/// Get the own connection to the server.
 	pub fn get_own_connection(&self) -> Result<Connection<'a>, Error> {
@@ -564,6 +596,11 @@ impl<'a, 'b> PartialEq<Channel<'b>> for Channel<'a> {
 	}
 }
 impl<'a> Eq for Channel<'a> {}
+impl<'a> fmt::Debug for Channel<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Channel({})", self.get_id().0)
+	}
+}
 
 impl PartialEq<ChannelData> for ChannelData {
 	fn eq(&self, other: &ChannelData) -> bool {
@@ -678,24 +715,17 @@ impl<'a> Channel<'a> {
 		self.api.get_server_unwrap(self.get_server_id())
 	}
 
-	pub fn get_parent_channel(&self) -> Option<Channel<'a>> {
+	pub fn get_parent_channel(&self) -> Result<Option<Channel<'a>>, Error> {
 		match self.data {
-			Ok(data) => if let Ok(parent_channel_id) = data.get_parent_channel_id() {
+			Ok(data) => data.get_parent_channel_id().map(|parent_channel_id| {
 				if parent_channel_id.0 == 0 {
 					None
 				} else {
 					Some(self.get_server().get_channel_unwrap(parent_channel_id))
 				}
-			} else {
-				None
-			}
-			Err(_) => None,
+			}),
+			Err(_) => Err(Error::Ok),
 		}
-	}
-
-	/// The channel properties that are only available on request.
-	pub fn get_optional_data(&self) -> Option<&OptionalChannelData> {
-		self.data.ok().map(|data| &data.optional_data)
 	}
 }
 
@@ -713,6 +743,11 @@ impl<'a, 'b> PartialEq<Connection<'b>> for Connection<'a> {
 	}
 }
 impl<'a> Eq for Connection<'a> {}
+impl<'a> fmt::Debug for Connection<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Connection({})", self.get_id().0)
+	}
+}
 
 impl PartialEq<ConnectionData> for ConnectionData {
 	fn eq(&self, other: &ConnectionData) -> bool {
@@ -884,7 +919,7 @@ impl<'a> Connection<'a> {
 		}
 	}
 
-	/// The connection properties that are only available for our own client.
+	/*/// The connection properties that are only available for our own client.
 	pub fn get_own_data(&self) -> Option<&OwnConnectionData> {
 		self.data.ok().and_then(|data| data.own_data.as_ref())
 	}
@@ -897,7 +932,7 @@ impl<'a> Connection<'a> {
 	/// The connection properties that are only available on request.
 	pub fn get_optional_data(&self) -> Option<&OptionalConnectionData> {
 		self.data.ok().map(|data| &data.optional_data)
-	}
+	}*/
 }
 
 

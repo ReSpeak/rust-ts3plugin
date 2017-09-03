@@ -2,20 +2,28 @@ TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/Flakebi/rust
 =====================
 The documentation can be found here: [![At docs.rs](https://docs.rs/ts3plugin/badge.svg)](https://docs.rs/ts3plugin)
 
-TeamSpeak 3.1 updates the plugin api version from 20 to 21.  
-Version 0.2 and above are compatible with this version while version 0.1 is
-compatible with the api version 20.
+TeamSpeak 3.1 updates the plugin api version from 20 to 21.
+Version 0.2 of this crate and above are compatible with the api version 21
+while version 0.1 is compatible with the api version 20.
 
-Breaking changes will happen from time to time, leading to a minor version bump.
+Breaking changes will happen from time to time, leading to a minor version
+bump (rust semver).
 
 At the moment, not all methods that are exposed by the TeamSpeak API are
 available for plugins. If a method that you need is missing, please file an
 issue or open a pull request.
 
-Usage
------
+## Usage
+
 Add the following to your `Cargo.toml`:
+
 ```toml
+[package]
+name = "<pluginname>"
+version = "<version>"
+authors = ["<your name>"]
+description = "<description>"
+
 [lib]
 name = "<pluginname>"
 crate-type = ["cdylib"]
@@ -24,8 +32,11 @@ crate-type = ["cdylib"]
 ts3plugin = "0.3"
 ```
 
-This code can be used to make your library a TeamSpeak plugin:
-```rust,no-run
+## Example
+
+A fully working example, which creates a plugin that does nothing:
+
+```rust
 #[macro_use]
 extern crate ts3plugin;
 
@@ -34,15 +45,13 @@ use ts3plugin::*;
 struct MyTsPlugin;
 
 impl Plugin for MyTsPlugin {
+    // The default name is the crate name, but we can overwrite it here.
     fn name()        -> String { String::from("My Ts Plugin") }
-    fn version()     -> String { String::from("0.1.0") }
-    fn author()      -> String { String::from("My Name") }
-    fn description() -> String { String::from("A wonderful tiny example plugin") }
-    // Optional
     fn command() -> Option<String> { Some(String::from("myplugin")) }
     fn autoload() -> bool { false }
     fn configurable() -> ConfigureOffer { ConfigureOffer::No }
 
+    // The only required method
     fn new(api: &TsApi) -> Result<Box<MyTsPlugin>, InitError> {
         api.log_or_print("Inited", "MyTsPlugin", LogLevel::Info);
         Ok(Box::new(MyTsPlugin))
@@ -57,6 +66,7 @@ impl Plugin for MyTsPlugin {
 }
 
 create_plugin!(MyTsPlugin);
+
 ```
 
 Projects using this library
@@ -78,11 +88,3 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
-
-
-Template code that is needed to run the rust code in this file as a test:
-
-```rust,skeptic-template
-{}
-fn main(){{}}
-```

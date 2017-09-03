@@ -19,6 +19,8 @@ travis-ci = { repository = "Flakebi/rust-ts3plugin" }
 
 [lib]
 name = "ts3plugin"
+# Needed for cargo-readme
+path = "src/lib.rs"
 
 [features]
 default = []

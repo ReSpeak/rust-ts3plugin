@@ -1,3 +1,4 @@
+{% import "macros.tera" as macros %}
 {% if s.do_struct %}
 {% if s.documentation %}
 /// {{ s.documentation }}
@@ -6,8 +7,6 @@
 {% if s.public %}
 pub {% endif %}struct {{ s.name }} {
 {% for prop in s.properties %}
-	{% if prop.documentation %}
-	{{ prop.documentation }}{% endif %}
 	{{ prop.name }}: {% if prop.result %}
 Result<{{ prop.type_s }}, ::Error>{% else %}
 {{ prop.type_s }}{% endif %},
@@ -22,6 +21,9 @@ impl {{ s.name }} {
 {% endif %}
 {% if s.do_impl %}
 {% for prop in s.properties %}
+	{% if prop.public %}
+{{ macros::do_doc(prop=prop,depth=1) }}{% endif %}
+	#[inline]
 	{% if prop.public %}
 	pub {% else %}	{% endif %}
 fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
@@ -72,29 +74,6 @@ fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 
 {% endif %}
 {% if s.do_impl %}
-{% if s.do_properties %}
-	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property> {
-		let mut v = vec![
-			{% for prop in s.properties %}
-			{{ s.api_name }}Property {
-				property: {{ s.api_name }}PropertyList::{{ prop.name | simplify  | title }},
-			{% if prop.result %}
-				data: self.get_{{ prop.name }}().map(|p| {{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(p)),
-			{% else %}
-				data: Ok({{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(self.get_{{ prop.name }}())),
-			{% endif %}
-			},
-			{% endfor %}
-		];
-		v.retain(|p| if let Err(Error::Ok) = p.data {
-			false
-		} else {
-			true
-		});
-		v
-	}
-
-{% endif %}
 {% if impl %}
 {{ s.extra_implementation | indent(depth=1) }}}
 
@@ -103,6 +82,7 @@ fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 impl<'a> {{ s.api_name }}<'a> {
 {% for prop in s.properties %}
 	{% if prop.api_getter %}
+{{ macros::do_doc(prop=prop,depth=1) }}	#[inline]
 	pub fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
 		match self.data {
 			Ok(data) => data.get_{{ prop.name }}(),
@@ -111,27 +91,83 @@ impl<'a> {{ s.api_name }}<'a> {
 	}
 	{% endif %}
 {% endfor %}
+{% if s.do_properties %}
+
+	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property> {
+		let mut v = vec![
+			{% for prop in s.properties %}
+			{% if prop.result and prop.api_getter %}
+			{{ s.api_name }}Property {
+				property: {{ s.api_name }}PropertyList::{{ prop.name | simplify  | title }},
+				data: self.get_{{ prop.name }}().map(|p| {{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(p)),
+			},
+			{% endif %}
+			{% endfor %}
+{{ s.extra_properties | indent(depth=3) }}
+		];
+		v.retain(|p| if let Err(Error::Ok) = p.data {
+			false
+		} else {
+			true
+		});
+		v
+	}
+{% endif %}
 }
 
 {% endif %}
 {% if s.do_properties %}
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum {{ s.api_name }}PropertyType<'a> {
 {% for t in property_types %}
 	{{ t.0 | simplify | title }}({{ t.1 }}),
 {% endfor %}
+{{ s.extra_property_type | indent(depth=1) }}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum {{ s.api_name }}PropertyList {
 {% for prop in properties %}
-	{{ prop.name | title }},
+{% if prop.result and prop.api_getter %}
+{{ macros::do_doc(prop=prop,depth=1) }}	{{ prop.name | title }},
+{% endif %}
 {% endfor %}
+{{ s.extra_property_list | indent(depth=1) }}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct {{ s.api_name }}Property<'a> {
 	property: {{ s.api_name }}PropertyList,
 	data: Result<{{ s.api_name }}PropertyType<'a>, Error>,
+}
+
+impl<'a> {{ s.api_name }}Property<'a> {
+	pub fn property(&self) -> {{ s.api_name }}PropertyList {
+		self.property
+	}
+	pub fn data(&self) -> Result<{{ s.api_name }}PropertyType<'a>, Error> {
+		//self.data.as_ref().map_err(|e| *e)
+		self.data.clone()
+	}
+}
+
+pub type {{ s.api_name }}Changes<'a> = Vec<(Option<{{ s.api_name }}Property<'a>>, {{ s.api_name}}Property<'a>)>;
+
+fn get_{{ s.api_name | lower }}_changes<'a>(mut old: Vec<{{ s.api_name }}Property<'a>>,
+	new: Vec<{{ s.api_name }}Property<'a>>)
+	-> {{ s.api_name }}Changes<'a> {
+	new.into_iter().filter_map(|p| {
+		if let Some(i_old) = old.iter()
+			.position(|p_old| p_old.property == p.property) {
+			let p_old = old.remove(i_old);
+			if p_old == p {
+				None
+			} else {
+				Some((Some(p_old.clone()), p))
+			}
+		} else {
+			Some((None, p))
+		}
+	}).collect()
 }
 {% endif %}

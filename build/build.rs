@@ -68,6 +68,8 @@ struct Property<'a> {
 	api_getter: bool,
 	/// If the getter method should be public.
 	public: bool,
+	/// If this property needs to be requested.
+	requested: bool,
 }
 
 impl<'a> Property<'a> {
@@ -225,7 +227,7 @@ impl<'a> Property<'a> {
 impl<'a> serde::Serialize for Property<'a> {
 	fn serialize<S: serde::Serializer>(&self, serializer: S)
 		-> std::result::Result<S::Ok, S::Error> {
-		let mut s = serializer.serialize_struct("Property", 21)?;
+		let mut s = serializer.serialize_struct("Property", 22)?;
 
 		// Attributes
 		s.serialize_field("name", &self.name)?;
@@ -247,6 +249,7 @@ impl<'a> serde::Serialize for Property<'a> {
 		s.serialize_field("default_args_update", &self.default_args_update)?;
 		s.serialize_field("api_getter", &self.api_getter)?;
 		s.serialize_field("public", &self.public)?;
+		s.serialize_field("requested", &self.requested)?;
 
 		// Extra attributes
 		s.serialize_field("return_type", &self.create_return_type())?;
@@ -277,6 +280,7 @@ struct PropertyBuilder<'a> {
 	default_args_update: Cow<'a, str>,
 	api_getter: bool,
 	public: bool,
+	requested: bool,
 }
 
 #[allow(dead_code)]
@@ -287,7 +291,6 @@ impl<'a> PropertyBuilder<'a> {
 		result.result = true;
 		result.should_update = true;
 		result.api_getter = true;
-		result.public = true;
 		result
 	}
 
@@ -393,6 +396,12 @@ impl<'a> PropertyBuilder<'a> {
 		res
 	}
 
+	fn requested(&self, requested: bool) -> PropertyBuilder<'a> {
+		let mut res = self.clone();
+		res.requested = requested;
+		res
+	}
+
 	fn finalize(self) -> Property<'a> {
 		Property {
 			name: self.name,
@@ -412,6 +421,7 @@ impl<'a> PropertyBuilder<'a> {
 			default_args_update: self.default_args_update,
 			api_getter: self.api_getter,
 			public: self.public,
+			requested: self.requested,
 		}
 	}
 }
@@ -433,6 +443,12 @@ struct Struct<'a> {
 	extra_creation: Cow<'a, str>,
 	/// Code that will be inserted into the Implementation of the struct
 	extra_implementation: Cow<'a, str>,
+	/// Code that will be inserted into the PropertyType enum
+	extra_property_type: Cow<'a, str>,
+	/// Code that will be inserted into the PropertyList enum
+	extra_property_list: Cow<'a, str>,
+	/// Code that will be inserted into the properties() function
+	extra_properties: Cow<'a, str>,
 	/// Arguments that are taken by the constructor
 	constructor_args: Cow<'a, str>,
 	/// If the resulting struct is public
@@ -456,6 +472,9 @@ struct StructBuilder<'a> {
 	extra_initialisation: Cow<'a, str>,
 	extra_creation: Cow<'a, str>,
 	extra_implementation: Cow<'a, str>,
+	extra_property_type: Cow<'a, str>,
+	extra_property_list: Cow<'a, str>,
+	extra_properties: Cow<'a, str>,
 	constructor_args: Cow<'a, str>,
 	public: bool,
 	do_struct: bool,
@@ -470,7 +489,6 @@ struct StructBuilder<'a> {
 impl<'a> StructBuilder<'a> {
 	fn new() -> StructBuilder<'a> {
 		let mut result = Self::default();
-		result.public = true;
 		result.do_struct = true;
 		result.do_impl = true;
 		result.do_constructor = true;
@@ -512,6 +530,24 @@ impl<'a> StructBuilder<'a> {
 	fn extra_initialisation<S: Into<Cow<'a, str>>>(&mut self, extra_initialisation: S) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_initialisation = extra_initialisation.into();
+		res
+	}
+
+	fn extra_property_type<S: Into<Cow<'a, str>>>(&mut self, extra_property_type: S) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.extra_property_type = extra_property_type.into();
+		res
+	}
+
+	fn extra_property_list<S: Into<Cow<'a, str>>>(&mut self, extra_property_list: S) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.extra_property_list = extra_property_list.into();
+		res
+	}
+
+	fn extra_properties<S: Into<Cow<'a, str>>>(&mut self, extra_properties: S) -> StructBuilder<'a> {
+		let mut res = self.clone();
+		res.extra_properties = extra_properties.into();
 		res
 	}
 
@@ -586,6 +622,9 @@ impl<'a> StructBuilder<'a> {
 			extra_initialisation: self.extra_initialisation,
 			extra_creation: self.extra_creation,
 			extra_implementation: self.extra_implementation,
+			extra_property_type: self.extra_property_type,
+			extra_property_list: self.extra_property_list,
+			extra_properties: self.extra_properties,
 			constructor_args: self.constructor_args,
 			public: self.public,
 			do_struct: self.do_struct,
@@ -620,7 +659,7 @@ impl<'a> Struct<'a> {
 		for s in all_structs.iter().filter(|s| s.api_name == self.api_name) {
 			for p in &s.properties {
 				let t = p.type_s.to_string();
-				if property_types.iter().all(|p| p.0 != t) {
+				if p.result && p.api_getter && property_types.iter().all(|p| p.0 != t) {
 					property_types.push((t, p.create_ref_type()));
 				}
 			}
@@ -631,23 +670,12 @@ impl<'a> Struct<'a> {
 		f.write_all(s.as_bytes())?;
 		Ok(())
 	}
-
-	fn create_property_types(&self) -> Vec<String> {
-		let mut res = Vec::<String>::new();
-		for p in &self.properties {
-			let t = p.type_s.to_string();
-			if !res.contains(&t) {
-				res.push(t);
-			}
-		}
-		res
-	}
 }
 
 impl<'a> serde::Serialize for Struct<'a> {
 	fn serialize<S: serde::Serializer>(&self, serializer: S)
 		-> std::result::Result<S::Ok, S::Error> {
-		let mut s = serializer.serialize_struct("Struct", 17)?;
+		let mut s = serializer.serialize_struct("Struct", 19)?;
 
 		// Attributes
 		s.serialize_field("name", &self.name)?;
@@ -660,6 +688,9 @@ impl<'a> serde::Serialize for Struct<'a> {
 		s.serialize_field("extra_initialisation", &self.extra_initialisation)?;
 		s.serialize_field("extra_creation", &self.extra_creation)?;
 		s.serialize_field("extra_implementation", &self.extra_implementation)?;
+		s.serialize_field("extra_property_type", &self.extra_property_type)?;
+		s.serialize_field("extra_property_list", &self.extra_property_list)?;
+		s.serialize_field("extra_properties", &self.extra_properties)?;
 		s.serialize_field("constructor_args", &self.constructor_args)?;
 		s.serialize_field("public", &self.public)?;
 		s.serialize_field("do_struct", &self.do_struct)?;
@@ -669,22 +700,19 @@ impl<'a> serde::Serialize for Struct<'a> {
 		s.serialize_field("do_constructor", &self.do_constructor)?;
 		s.serialize_field("do_properties", &self.do_properties)?;
 
-		// Extra attributes
-		s.serialize_field("property_types", &self.create_property_types())?;
-
 		s.end()
 	}
 }
 
 /// Build parts of lib.rs as most of the structs are very repetitive
 quick_main!(|| -> Result<()> {
-	let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
 	let out_dir = env::var("OUT_DIR")?;
-	println!("cargo:rerun-if-changed={}/build/*.rs", manifest_dir);
-	println!("cargo:rerun-if-changed={}/build/*.tera", manifest_dir);
-	println!("cargo:rerun-if-changed={}/README.md", manifest_dir);
+	for f in &["build.rs", "channel.rs", "connection.rs", "server.rs",
+		"struct.rs.tera", "macros.tera"] {
+		println!("cargo:rerun-if-changed=build/{}", f);
+	}
 
-	let mut tera = compile_templates!(format!("{}/build/*.tera", manifest_dir).as_str());
+	let mut tera = compile_templates!("build/*.tera");
 	tera.register_filter("indent", |value, args| {
 		if let Some(&tera::Value::Number(ref n)) = args.get("depth") {
 			if let tera::Value::String(s) = value {

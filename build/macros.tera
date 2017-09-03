@@ -1,0 +1,12 @@
+{% macro do_doc(prop,depth) %}
+{% if prop.documentation %}
+{{ prop.documentation | indent(depth=depth) }}{% endif %}
+{% if prop.requested %}
+{% filter indent(depth=depth) %}
+{% if prop.documentation %}
+///
+{% endif %}
+/// Only available if requested explicitly through `request_data`.
+{% endfilter %}
+{% endif %}
+{% endmacro do_doc %}

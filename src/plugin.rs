@@ -23,13 +23,21 @@ pub enum InitError {
 pub trait Plugin: 'static + Send {
 	// ************************* Configuration methods *************************
 	/// The name of the plugin as displayed in TeamSpeak.
-	fn name() -> String where Self: Sized;
+	///
+	/// The default value is the crate name.
+	fn name() -> String where Self: Sized { String::from("MAGIC\0") }
 	/// The version of the plugin as displayed in TeamSpeak.
-	fn version() -> String where Self: Sized;
+	///
+	/// The default value is the crate version.
+	fn version() -> String where Self: Sized { String::from("MAGIC\0") }
 	/// The author of the plugin as displayed in TeamSpeak.
-	fn author() -> String where Self: Sized;
+	///
+	/// The default value is the crate author.
+	fn author() -> String where Self: Sized { String::from("MAGIC\0") }
 	/// The description of the plugin as displayed in TeamSpeak.
-	fn description() -> String where Self: Sized;
+	///
+	/// The default value is the crate description.
+	fn description() -> String where Self: Sized { String::from("MAGIC\0") }
 	/// The command prefix that can be used by users in the chat, defaults to `None`.
 	fn command() -> Option<String> where Self: Sized { None }
 	/// If the plugin offers the possibility to be configured, defaults to
@@ -74,8 +82,10 @@ pub trait Plugin: 'static + Send {
 	fn connection_info(&mut self, api: &::TsApi, server: &::Server,
 		connection: &::Connection) {}
 
-	fn connection_updated(&mut self, api: &::TsApi, server: &::Server,
-		connection: &::Connection, old_connection: &::Connection, invoker: &::Invoker) {}
+	fn connection_properties_changed(&mut self, api: &::TsApi,
+		server: &::Server, connection: &::Connection,
+		old_connection: &::Connection, changes: ::ConnectionChanges,
+		invoker: &::Invoker) {}
 
 	/// If the plugin was informed about a new connection. If appeared is true, the connection
 	/// was previously not known to the plugin, if appeared is false, the connection left
@@ -339,8 +349,14 @@ macro_rules! create_plugin {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
 			if data.name.is_none() {
 				let s = $typename::name();
-				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
-				data.name = Some(s);
+				if s == "MAGIC\0" {
+					let s = ::std::ffi::CString::new(env!("CARGO_PKG_NAME"))
+						.expect("Crate name contains nul character");
+					data.name = Some(s);
+				} else {
+					let s = ::std::ffi::CString::new(s).expect("Plugin name contains nul character");
+					data.name = Some(s);
+				}
 			}
 			data.name.as_ref().unwrap().as_ptr()
 		}
@@ -353,8 +369,14 @@ macro_rules! create_plugin {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
 			if data.version.is_none() {
 				let s = $typename::version();
-				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
-				data.version = Some(s);
+				if s == "MAGIC\0" {
+					let s = ::std::ffi::CString::new(env!("CARGO_PKG_VERSION"))
+						.expect("Crate version contains nul character");
+					data.version = Some(s);
+				} else {
+					let s = ::std::ffi::CString::new(s).expect("Plugin version contains nul character");
+					data.version = Some(s);
+				}
 			}
 			data.version.as_ref().unwrap().as_ptr()
 		}
@@ -367,8 +389,14 @@ macro_rules! create_plugin {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
 			if data.author.is_none() {
 				let s = $typename::author();
-				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
-				data.author = Some(s);
+				if s == "MAGIC\0" {
+					let s = ::std::ffi::CString::new(env!("CARGO_PKG_AUTHORS"))
+						.expect("Crate author contains nul character");
+					data.author = Some(s);
+				} else {
+					let s = ::std::ffi::CString::new(s).expect("Plugin author contains nul character");
+					data.author = Some(s);
+				}
 			}
 			data.author.as_ref().unwrap().as_ptr()
 		}
@@ -381,8 +409,14 @@ macro_rules! create_plugin {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
 			if data.description.is_none() {
 				let s = $typename::description();
-				let s = ::std::ffi::CString::new(s).expect("String contains nul character");
-				data.description = Some(s);
+				if s == "MAGIC\0" {
+					let s = ::std::ffi::CString::new(env!("CARGO_PKG_DESCRIPTION"))
+						.expect("Crate description contains nul character");
+					data.description = Some(s);
+				} else {
+					let s = ::std::ffi::CString::new(s).expect("Plugin description contains nul character");
+					data.description = Some(s);
+				}
 			}
 			data.description.as_ref().unwrap().as_ptr()
 		}

@@ -243,8 +243,10 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(server_id: u64,
 	}
 	let server = api.get_server_unwrap(server_id);
 	let connection = server.get_connection_unwrap(connection_id);
-	plugin.connection_updated(api, &server, &connection,
-		&::Connection::new(api, &old_connection),
+	let old_connection = ::Connection::new(api, &old_connection);
+	plugin.connection_properties_changed(api, &server, &connection,
+		&old_connection, ::get_connection_changes(old_connection.properties(),
+			connection.properties()),
 		&::Invoker::new(server.clone(), invoker));
 }
 
@@ -498,7 +500,8 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u6
 	let data = data.0.as_mut().unwrap();
 	let api = &mut data.0;
 	let plugin = &mut data.1;
-	// Seems like I really like constructions like that, I failed to do it simpler
+	// FIXME
+	/*// Seems like I really like constructions like that, I failed to do it simpler
 	// because I can't borrow api to print an error message in the inner part.
 	if let Err(error) = if let Some(channel) = api.get_mut_server(server_id)
 			.unwrap().get_mut_channel(channel_id) {
@@ -508,7 +511,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(server_id: u6
 			Ok(())
 		} {
 		error!(api, "Can't get channel description", error);
-	}
+	}*/
 	let server = api.get_server_unwrap(server_id);
 	let channel = server.get_channel_unwrap(channel_id);
 	plugin.channel_description_updated(api, &server, &channel);

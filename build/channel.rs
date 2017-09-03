@@ -20,33 +20,20 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 	let builder_string = builder.type_s("String");
 	let builder_i32 = builder.type_s("i32");
 	let builder_bool = builder.type_s("bool");
-	let builder_optional_data = builder
-		.default_args("server_id, channel_id, ")
-		.default_args_update("self.server_id, self.channel_id, ");
 
-	// Optional channel data
-	let optional_channel_data = StructBuilder::new()
-		.name("OptionalChannelData")
-		.api_name("Channel")
-		.documentation("Channel properties that have to be fetched explicitely")
-		.constructor_args("server_id: ServerId, channel_id: ChannelId")
-		.properties(vec![
-			builder_optional_data.name("channel_id").type_s("ChannelId").result(false).finalize(),
-			builder_optional_data.name("server_id").type_s("ServerId").result(false).finalize(),
-			builder_optional_data.name("description").type_s("String").finalize(),
-		]).finalize();
-	// The real channel data
-	let builder = builder.public(false);
-	let builder_string = builder_string.public(false);
-	let builder_i32 = builder_i32.public(false);
-	let builder_bool = builder_bool.public(false);
 	let channel = StructBuilder::new()
 		.name("ChannelData")
 		.api_name("Channel")
-		.public(false)
 		.do_api_impl(true)
 		.do_properties(true)
 		.constructor_args("server_id: ServerId, id: ChannelId")
+		.extra_property_type("OptionChannel(Option<Channel<'a>>),")
+		.extra_property_list("ParentChannel,")
+		.extra_properties("\
+			ChannelProperty {\n\
+				\tproperty: ChannelPropertyList::ParentChannel,\n\
+				\tdata: self.get_parent_channel().map(|p| ChannelPropertyType::OptionChannel(p)),\n\
+			},")
 		.properties(vec![
 			builder.name("id").type_s("ChannelId").result(false).api_getter(false).finalize(),
 			builder.name("server_id").type_s("ServerId").result(false).api_getter(false).finalize(),
@@ -76,9 +63,9 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
 			builder_i32.name("icon_id").finalize(),
 			builder_bool.name("private").value_name("FlagPrivate").finalize(),
-
-			builder.name("optional_data").type_s("OptionalChannelData").initialisation("OptionalChannelData::new(server_id, id)").update("OptionalChannelData::new(self.server_id, self.id)").result(false).api_getter(false).finalize(),
+			// Requested
+			builder_string.name("description").requested(true).finalize(),
 		]).finalize();
 
-	vec![optional_channel_data, channel]
+	vec![channel]
 }
