@@ -27,12 +27,11 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		.do_api_impl(true)
 		.do_properties(true)
 		.constructor_args("server_id: ServerId, id: ChannelId")
-		.extra_property_type("OptionChannel(Option<Channel<'a>>),")
-		.extra_property_list("ParentChannel,")
+		.extra_property_list(vec![("Option<Channel<'a>>".into(), "OptionChannel".into(), "ParentChannel,".into())])
 		.extra_properties("\
-			ChannelProperty {\n\
-				\tproperty: ChannelPropertyList::ParentChannel,\n\
-				\tdata: self.get_parent_channel().map(|p| ChannelPropertyType::OptionChannel(p)),\n\
+			ChannelProperty::OptionChannel {\n\
+				\tproperty: ChannelOptionChannelProperty::ParentChannel,\n\
+				\tdata: self.get_parent_channel(),\n\
 			},")
 		.properties(vec![
 			builder.name("id").type_s("ChannelId").result(false).api_getter(false).finalize(),

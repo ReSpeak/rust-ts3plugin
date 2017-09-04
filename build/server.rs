@@ -30,12 +30,11 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		.do_api_impl(true)
 		.do_properties(true)
 		.constructor_args("id: ServerId")
-		.extra_property_type("Connection(Connection<'a>),")
-		.extra_property_list("OwnConnection,")
+		.extra_property_list(vec![("Connection<'a>".into(), "Connection".into(), "OwnConnection,".into())])
 		.extra_properties("\
-			ServerProperty {\n\
-				\tproperty: ServerPropertyList::OwnConnection,\n\
-				\tdata: self.get_own_connection().map(|p| ServerPropertyType::Connection(p)),\n\
+			ServerProperty::Connection {\n\
+				\tproperty: ServerConnectionProperty::OwnConnection,\n\
+				\tdata: self.get_own_connection(),\n\
 			},")
 		.properties(vec![
 			builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).api_getter(false).finalize(),

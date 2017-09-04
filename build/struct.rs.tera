@@ -97,15 +97,15 @@ impl<'a> {{ s.api_name }}<'a> {
 		let mut v = vec![
 			{% for prop in s.properties %}
 			{% if prop.result and prop.api_getter %}
-			{{ s.api_name }}Property {
-				property: {{ s.api_name }}PropertyList::{{ prop.name | simplify  | title }},
-				data: self.get_{{ prop.name }}().map(|p| {{ s.api_name }}PropertyType::{{ prop.type_s | simplify  | title }}(p)),
+			{{ s.api_name }}Property::{{ prop.type_s | simplify | title }} {
+				property: {{ s.api_name }}{{ prop.type_s | simplify | title }}Property::{{ prop.name | simplify  | title }},
+				data: self.get_{{ prop.name }}(),
 			},
 			{% endif %}
 			{% endfor %}
 {{ s.extra_properties | indent(depth=3) }}
 		];
-		v.retain(|p| if let Err(Error::Ok) = p.data {
+		v.retain(|p| if let Some(Error::Ok) = p.error() {
 			false
 		} else {
 			true
@@ -117,37 +117,52 @@ impl<'a> {{ s.api_name }}<'a> {
 
 {% endif %}
 {% if s.do_properties %}
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum {{ s.api_name }}PropertyType<'a> {
 {% for t in property_types %}
-	{{ t.0 | simplify | title }}({{ t.1 }}),
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum {{ s.api_name }}{{ t.0 | simplify | title }}Property {
+	{% for prop in properties %}
+		{% if prop.result and prop.api_getter and prop.type_s == t.0 %}
+{{ macros::do_doc(prop=prop,depth=1) }}{{ prop.name | title }},
+		{% endif %}
+	{% endfor %}
+	{% for ps in s.extra_property_list %}
+		{% if ps.0 == t.1 %}
+{{ ps.2 | indent(depth=1) }}
+		{% endif %}
+	{% endfor %}
+}
+{% endfor %}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum {{ s.api_name }}Property<'a> {
+{% for t in property_types %}
+	{{ t.0 | simplify | title }} {
+		property: {{ s.api_name }}{{ t.0 | simplify | title }}Property,
+		data: Result<{{ t.1 }}, Error>,
+	},
 {% endfor %}
 {{ s.extra_property_type | indent(depth=1) }}
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum {{ s.api_name }}PropertyList {
-{% for prop in properties %}
-{% if prop.result and prop.api_getter %}
-{{ macros::do_doc(prop=prop,depth=1) }}	{{ prop.name | title }},
-{% endif %}
-{% endfor %}
-{{ s.extra_property_list | indent(depth=1) }}
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct {{ s.api_name }}Property<'a> {
-	property: {{ s.api_name }}PropertyList,
-	data: Result<{{ s.api_name }}PropertyType<'a>, Error>,
-}
-
 impl<'a> {{ s.api_name }}Property<'a> {
-	pub fn property(&self) -> {{ s.api_name }}PropertyList {
-		self.property
+	pub fn error(&self) -> Option<Error> {
+		match *self {
+			{% for t in property_types %}
+			{{ s.api_name }}Property::{{ t.0 | simplify | title }} { ref data, .. } =>
+				data.as_ref().err().cloned(),
+			{% endfor %}
+		}
 	}
-	pub fn data(&self) -> Result<{{ s.api_name }}PropertyType<'a>, Error> {
-		//self.data.as_ref().map_err(|e| *e)
-		self.data.clone()
+	pub fn property_eq(&self, other: &{{ s.api_name }}Property) -> bool {
+		match *self {
+			{% for t in property_types %}
+			{{ s.api_name }}Property::{{ t.0 | simplify | title }} { ref property, .. } =>
+				if let {{ s.api_name }}Property::{{ t.0 | simplify | title }} { property: ref p2, .. } = *other {
+					return property == p2;
+				},
+			{% endfor %}
+		}
+		false
 	}
 }
 
@@ -158,7 +173,7 @@ fn get_{{ s.api_name | lower }}_changes<'a>(mut old: Vec<{{ s.api_name }}Propert
 	-> {{ s.api_name }}Changes<'a> {
 	new.into_iter().filter_map(|p| {
 		if let Some(i_old) = old.iter()
-			.position(|p_old| p_old.property == p.property) {
+			.position(|p_old| p.property_eq(p_old)) {
 			let p_old = old.remove(i_old);
 			if p_old == p {
 				None

@@ -446,7 +446,8 @@ struct Struct<'a> {
 	/// Code that will be inserted into the PropertyType enum
 	extra_property_type: Cow<'a, str>,
 	/// Code that will be inserted into the PropertyList enum
-	extra_property_list: Cow<'a, str>,
+	/// (type, ref type, enum name)
+	extra_property_list: Vec<(Cow<'a, str>, Cow<'a, str>, Cow<'a, str>)>,
 	/// Code that will be inserted into the properties() function
 	extra_properties: Cow<'a, str>,
 	/// Arguments that are taken by the constructor
@@ -473,7 +474,7 @@ struct StructBuilder<'a> {
 	extra_creation: Cow<'a, str>,
 	extra_implementation: Cow<'a, str>,
 	extra_property_type: Cow<'a, str>,
-	extra_property_list: Cow<'a, str>,
+	extra_property_list: Vec<(Cow<'a, str>, Cow<'a, str>, Cow<'a, str>)>,
 	extra_properties: Cow<'a, str>,
 	constructor_args: Cow<'a, str>,
 	public: bool,
@@ -539,9 +540,9 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
-	fn extra_property_list<S: Into<Cow<'a, str>>>(&mut self, extra_property_list: S) -> StructBuilder<'a> {
+	fn extra_property_list(&mut self, extra_property_list: Vec<(Cow<'a, str>, Cow<'a, str>, Cow<'a, str>)>) -> StructBuilder<'a> {
 		let mut res = self.clone();
-		res.extra_property_list = extra_property_list.into();
+		res.extra_property_list = extra_property_list;
 		res
 	}
 
@@ -661,6 +662,13 @@ impl<'a> Struct<'a> {
 				let t = p.type_s.to_string();
 				if p.result && p.api_getter && property_types.iter().all(|p| p.0 != t) {
 					property_types.push((t, p.create_ref_type()));
+				}
+			}
+			for &(ref t, ref r, _) in &s.extra_property_list {
+				let t = t.as_ref();
+				let r = r.as_ref();
+				if property_types.iter().all(|p| p.0 != t) {
+					property_types.push((r.to_string(), t.to_string()));
 				}
 			}
 		}

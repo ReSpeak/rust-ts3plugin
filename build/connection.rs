@@ -46,16 +46,15 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		.do_api_impl(true)
 		.do_properties(true)
 		.constructor_args("server_id: ServerId, id: ConnectionId")
-		.extra_property_type("Channel(Channel<'a>),")
-		.extra_property_list("Channel,\nChannelGroupInheritedChannel,")
+		.extra_property_list(vec![("Channel<'a>".into(), "Channel".into(), "Channel,\nChannelGroupInheritedChannel,".into())])
 		.extra_properties("\
-			ConnectionProperty {\n\
-				\tproperty: ConnectionPropertyList::Channel,\n\
-				\tdata: self.get_channel().map(|p| ConnectionPropertyType::Channel(p)),\n\
+			ConnectionProperty::Channel {\n\
+				\tproperty: ConnectionChannelProperty::Channel,\n\
+				\tdata: self.get_channel(),\n\
 			},
-			ConnectionProperty {\n\
-				\tproperty: ConnectionPropertyList::ChannelGroupInheritedChannel,\n\
-				\tdata: self.get_channel_group_inherited_channel().map(|p| ConnectionPropertyType::Channel(p)),\n\
+			ConnectionProperty::Channel {\n\
+				\tproperty: ConnectionChannelProperty::ChannelGroupInheritedChannel,\n\
+				\tdata: self.get_channel_group_inherited_channel(),\n\
 			},")
 		.properties(vec![
 			builder.name("id").type_s("ConnectionId").result(false).api_getter(false).finalize(),
