@@ -463,9 +463,9 @@ impl<'a> Server<'a> {
 		-> ServerGroup {
 		self.get_server_group(server_group_id)
 			.unwrap_or_else(|| {
-				self.api.log_or_print(
+				/*self.api.log_or_print(
 					format!("Can't find server group {:?}", server_group_id),
-					"rust-ts3plugin", ::LogLevel::Warning);
+					"rust-ts3plugin", ::LogLevel::Warning);*/
 				ServerGroup { }
 			})
 	}
@@ -474,7 +474,7 @@ impl<'a> Server<'a> {
 		-> ChannelGroup {
 		self.get_channel_group(channel_group_id)
 			.unwrap_or_else(|| {
-				self.api.log_or_print(format!("Can't find channel group {:?}", channel_group_id), "rust-ts3plugin", ::LogLevel::Warning);
+				//self.api.log_or_print(format!("Can't find channel group {:?}", channel_group_id), "rust-ts3plugin", ::LogLevel::Warning);
 				ChannelGroup { }
 			})
 	}

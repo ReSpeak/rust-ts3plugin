@@ -30,13 +30,7 @@ chrono = "0.4"
 lazy_static = "0.2"
 ts3plugin-sys = "0.3"
 
-# For tests
 [build-dependencies]
 error-chain = "0.10"
 serde = "1"
-skeptic = "0.6"
-#tera = "0.10"
-tera = { path = "../tera" }
-
-[dev-dependencies]
-skeptic = "0.6"
+tera = "0.11"

@@ -4,7 +4,6 @@
 #[macro_use]
 extern crate error_chain;
 extern crate serde;
-extern crate skeptic;
 #[macro_use]
 extern crate tera;
 
@@ -776,9 +775,6 @@ quick_main!(|| -> Result<()> {
 		}
 	}
 
-	// Create tests for README.md
-	skeptic::generate_doc_tests(&["README.md"]);
-
 	Ok(())
 });
 
@@ -801,7 +797,7 @@ fn to_pascal_case<S: AsRef<str>>(text: S) -> String {
 	s
 }
 
-/// Indent a string by a given count using spaces.
+/// Indent a string by a given count using tabs.
 fn indent<S: AsRef<str>>(s: S, count: usize) -> String {
 	let sref = s.as_ref();
 	let line_count = sref.lines().count();

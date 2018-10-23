@@ -1,4 +1,4 @@
-TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/Flakebi/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/Flakebi/rust-ts3plugin) [![Latest version](https://img.shields.io/crates/v/ts3plugin.svg)](https://crates.io/crates/ts3plugin)
+TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/ReSpeak/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/ReSpeak/rust-ts3plugin) [![Latest version](https://img.shields.io/crates/v/ts3plugin.svg)](https://crates.io/crates/ts3plugin)
 =====================
 The documentation can be found here: [![At docs.rs](https://docs.rs/ts3plugin/badge.svg)](https://docs.rs/ts3plugin)
 
@@ -71,8 +71,8 @@ create_plugin!(MyTsPlugin);
 
 Projects using this library
 ---------------------------
- - [TeamSpeak3 Text to Speech](https://github.com/Flakebi/ts3tts)
- - [TsPressor](https://github.com/Splamy/TsPressor)
+ - [TeamSpeak3 Text to Speech](https://github.com/ReSpeak/ts3tts)
+ - [TsPressor](https://github.com/ReSpeak/TsPressor)
 
 License
 -------
