@@ -57,10 +57,11 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
+use std::str::Utf8Error;
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_void,c_char, c_int};
 use chrono::*;
 
 /// Converts a normal string to a CString.
@@ -602,6 +603,34 @@ impl Connection {
 	}
 }
 
+// Client property value which can be converted to a UTF8 String
+pub struct ClientStringVariable {
+	pub value: *mut c_char
+}
+
+impl ClientStringVariable {
+	/// Get a &str from property value or return an Utf8Error on conversion fail
+	pub fn to_str<'a>(&'a self) -> Result<&'a str, Utf8Error> {
+		unsafe {CStr::from_ptr(self.value).to_str()}
+	}
+
+	/// Get owned String from lossy conversion of value
+	pub fn to_owned_string_lossy(&self) -> String {
+		unsafe {CStr::from_ptr(self.value).to_string_lossy().into_owned()}
+	}
+}
+
+impl Drop for ClientStringVariable {
+	fn drop(&mut self) {
+		use std::os::raw::c_void;
+		unsafe {
+			(TS3_FUNCTIONS.as_ref()
+			.expect("Functions should be loaded").free_memory)
+				(self.value as *mut c_void);
+		}
+	}
+}
+
 
 // ********** TsApi **********
 /// The api functions provided by TeamSpeak
@@ -645,6 +674,24 @@ impl TsApi {
 			_ => return Err(res)
 		}
 		Ok(())
+	}
+
+	/// Get client properties as string
+	pub fn get_string_client_properties(&self,properties: ClientProperties, client: &ConnectionId, server: &ServerId) -> Result<ClientStringVariable,Error> {
+		let ServerId(s_id) = server;
+		let ConnectionId(c_id) = client;
+		unsafe {
+			let mut result: *mut c_char = std::ptr::null_mut();
+			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
+				.expect("Functions should be loaded").get_client_variable_as_string)
+					(*s_id,*c_id,properties as usize,&mut result));
+			match res {
+				Error::Ok => {
+					Ok(ClientStringVariable{value: result})
+				},
+				_ => Err(res)
+			}
+		}
 	}
 
 	/// Please try to use the member method `log_message` instead of this static method.
