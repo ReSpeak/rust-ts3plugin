@@ -60,6 +60,8 @@ pub use plugin::*;
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::mem::transmute;
+use std::ops::{Deref, DerefMut};
+use std::sync::MutexGuard;
 use std::os::raw::{c_char, c_int};
 use chrono::*;
 
@@ -73,9 +75,12 @@ macro_rules! to_cstring {
 
 /// Converts a CString to a normal string.
 macro_rules! to_string {
-	($string: expr) => {
-		String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned()
-	};
+	($string: expr) => {{
+		let res = String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned();
+		(::TS3_FUNCTIONS.as_ref().expect("Functions should be loaded")
+			.free_memory)($string as *mut ::std::os::raw::c_void);
+		res
+	}};
 }
 
 // Declare modules here so the macros are visible in the modules
@@ -84,6 +89,10 @@ pub mod plugin;
 
 // Import automatically generated structs
 include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+
+/// The api functions provided by TeamSpeak
+#[doc(hidden)]
+pub static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
 
 // ******************** Structs ********************
 /// The main struct that contains all permanently save data.
@@ -532,7 +541,8 @@ impl Connection {
 	}
 
 	/// Get a client property that is stored as a string.
-	fn get_client_property_as_string(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<String, Error> {
+	#[doc(hidden)]
+	pub fn get_client_property_as_string(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<String, Error> {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
@@ -603,10 +613,37 @@ impl Connection {
 }
 
 
-// ********** TsApi **********
-/// The api functions provided by TeamSpeak
-static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
+pub struct TsApiLock {
+	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+}
+impl Deref for TsApiLock {
+	type Target = TsApi;
+	fn deref(&self) -> &Self::Target {
+		&self.guard.0.as_ref().unwrap().0
+	}
+}
+impl DerefMut for TsApiLock {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.guard.0.as_mut().unwrap().0
+	}
+}
 
+pub struct PluginLock {
+	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+}
+impl Deref for PluginLock {
+	type Target = Plugin;
+	fn deref(&self) -> &Self::Target {
+		&*self.guard.0.as_ref().unwrap().1
+	}
+}
+impl DerefMut for PluginLock {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut *self.guard.0.as_mut().unwrap().1
+	}
+}
+
+// ********** TsApi **********
 // Don't provide a default Implementation because we don't want the TsApi
 // to be publicly constructable.
 impl TsApi {
@@ -645,6 +682,27 @@ impl TsApi {
 			_ => return Err(res)
 		}
 		Ok(())
+	}
+
+	/// Lock the global `TsApi` object. This will be `None` when the plugin is
+	/// constructed.
+	pub fn lock_api() -> Option<TsApiLock> {
+		let guard = ts3interface::DATA.lock().unwrap();
+		if guard.0.is_none() {
+			None
+		} else {
+			Some(TsApiLock { guard })
+		}
+	}
+
+	/// Lock the global `Plugin` object.
+	pub fn lock_plugin() -> Option<PluginLock> {
+		let guard = ts3interface::DATA.lock().unwrap();
+		if guard.0.is_none() {
+			None
+		} else {
+			Some(PluginLock { guard })
+		}
 	}
 
 	/// Please try to use the member method `log_message` instead of this static method.

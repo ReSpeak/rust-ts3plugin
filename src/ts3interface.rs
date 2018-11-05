@@ -11,7 +11,7 @@ use ::plugin::Plugin;
 
 lazy_static! {
 	/// The api, plugin and plugin id
-	static ref DATA: Mutex<(Option<(::TsApi, Box<Plugin>)>, Option<String>)> =
+	pub(crate) static ref DATA: Mutex<(Option<(::TsApi, Box<Plugin>)>, Option<String>)> =
 		Mutex::new((None, None));
 }
 
