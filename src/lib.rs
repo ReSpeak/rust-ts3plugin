@@ -665,20 +665,6 @@ impl ChannelData {
 			}
 		}
 	}
-
-	/// Send a message to this channel chat.
-	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
-		unsafe {
-			let text = to_cstring!(message.as_ref());
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").request_send_channel_text_msg)
-					(self.server_id.0, text.as_ptr(), self.id.0, std::ptr::null()));
-			match res {
-				Error::Ok => Ok(()),
-				_ => Err(res)
-			}
-		}
-	}
 }
 
 impl<'a> Channel<'a> {
@@ -725,6 +711,20 @@ impl<'a> Channel<'a> {
 				}
 			}),
 			Err(_) => Err(Error::Ok),
+		}
+	}
+
+	/// Send a message to this channel chat.
+	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
+		unsafe {
+			let text = to_cstring!(message.as_ref());
+			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
+				.expect("Functions should be loaded").request_send_channel_text_msg)
+					(self.data.unwrap().server_id.0, text.as_ptr(), self.data.unwrap().id.0, std::ptr::null()));
+			match res {
+				Error::Ok => Ok(()),
+				_ => Err(res)
+			}
 		}
 	}
 }
@@ -854,20 +854,6 @@ impl ConnectionData {
 			}
 		}
 	}
-
-	/// Send a private message to this connection.
-	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
-		unsafe {
-			let text = to_cstring!(message.as_ref());
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").request_send_private_text_msg)
-					(self.server_id.0, text.as_ptr(), self.id.0, std::ptr::null()));
-			match res {
-				Error::Ok => Ok(()),
-				_ => Err(res)
-			}
-		}
-	}
 }
 
 impl<'a> Connection<'a> {
@@ -933,6 +919,20 @@ impl<'a> Connection<'a> {
 	pub fn get_optional_data(&self) -> Option<&OptionalConnectionData> {
 		self.data.ok().map(|data| &data.optional_data)
 	}*/
+
+	/// Send a private message to this connection.
+	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
+		unsafe {
+			let text = to_cstring!(message.as_ref());
+			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
+				.expect("Functions should be loaded").request_send_private_text_msg)
+					(self.data.unwrap().server_id.0, text.as_ptr(), self.data.unwrap().id.0, std::ptr::null()));
+			match res {
+				Error::Ok => Ok(()),
+				_ => Err(res)
+			}
+		}
+	}
 }
 
 
@@ -1108,7 +1108,7 @@ impl TsApi {
 	/// These functions can be used to invoke actions that are not yet
 	/// implemented by this library. You should file a bug report or make a pull
 	/// request if you need to use this function.
-	pub unsafe fn get_raw_api(&self) -> &Ts3Functions {
+	pub unsafe fn get_raw_api() -> &'static Ts3Functions {
 		TS3_FUNCTIONS.as_ref().unwrap()
 	}
 

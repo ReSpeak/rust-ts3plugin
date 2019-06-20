@@ -7,7 +7,6 @@ An abstraction layer that simplifies creating TeamSpeak3 plugins
 and stores received data to provide a more convenient API.
 """
 repository = "https://github.com/Flakebi/rust-ts3plugin"
-documentation = "https://docs.rs/ts3plugin"
 readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
