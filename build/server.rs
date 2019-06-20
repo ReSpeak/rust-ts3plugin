@@ -44,6 +44,8 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
 			builder_string.name("platform").finalize(),
 			builder_string.name("version").finalize(),
+			builder_string.name("nickname").finalize(),
+			builder_string.name("accounting_token").finalize(),
 			// FIXME Always zero when queried as string, int or uint64
 			builder.name("created").type_s("DateTime<Utc>").finalize(),
 			builder.name("codec_encryption_mode").type_s("CodecEncryptionMode").finalize(),
@@ -112,6 +114,7 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 
 			builder_string.name("hostmessage").documentation("Only set on connect and not updated").finalize(),
 			builder.name("hostmessage_mode").type_s("HostmessageMode").documentation("Only set on connect and not updated").finalize(),
+			builder_i32.name("antiflood_points_needed_plugin_block").finalize(),
 		]).finalize();
 
 	vec![server]

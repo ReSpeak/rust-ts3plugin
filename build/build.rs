@@ -19,7 +19,7 @@ use tera::Tera;
 
 type Map<K, V> = BTreeMap<K, V>;
 
-#[allow(unused_doc_comment)]
+#[allow(unused_doc_comments)]
 mod errors {
 	// Create the Error, ErrorKind, ResultExt, and Result types
 	error_chain! {
@@ -640,8 +640,8 @@ impl<'a> StructBuilder<'a> {
 impl<'a> Struct<'a> {
 	fn create_struct(&self, f: &mut Write, tera: &Tera, all_structs: &[&Struct<'static>]) -> Result<()> {
 		let mut context = tera::Context::new();
-		context.add("s", &self);
-		context.add("all_structs", &all_structs);
+		context.insert("s", &self);
+		context.insert("all_structs", &all_structs);
 
 		// Assemble properties
 		let mut properties = Vec::<&Property<'static>>::new();
@@ -652,7 +652,7 @@ impl<'a> Struct<'a> {
 				}
 			}
 		}
-		context.add("properties", &properties);
+		context.insert("properties", &properties);
 
 		// Assemble property_types
 		let mut property_types = Vec::<(_, _)>::new();
@@ -671,7 +671,7 @@ impl<'a> Struct<'a> {
 				}
 			}
 		}
-		context.add("property_types", &property_types);
+		context.insert("property_types", &property_types);
 
 		let s = tera.render("struct.rs.tera", &context)?;
 		f.write_all(s.as_bytes())?;
@@ -711,7 +711,7 @@ impl<'a> serde::Serialize for Struct<'a> {
 	}
 }
 
-/// Build parts of lib.rs as most of the structs are very repetitive
+// Build parts of lib.rs as most of the structs are very repetitive
 quick_main!(|| -> Result<()> {
 	let out_dir = env::var("OUT_DIR")?;
 	for f in &["build.rs", "channel.rs", "connection.rs", "server.rs",

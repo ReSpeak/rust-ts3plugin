@@ -175,6 +175,9 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			client_b_r.name("is_channel_commander").type_s("bool").finalize(),
 			client_b_string_r.name("country").finalize(),
 			client_b_string_r.name("badges").finalize(),
+			client_b_string_r.name("myteamspeak_id").finalize(),
+			client_b_string_r.name("integrations").finalize(),
+			client_b_string_r.name("active_integrations_info").finalize(),
 	]).finalize();
 
 	vec![connection]

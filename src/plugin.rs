@@ -271,7 +271,7 @@ pub trait Plugin: 'static + Send {
 	///
 	/// [`Server::send_plugin_message`]: ../struct.Server.html#method.send_plugin_message
 	fn plugin_message(&mut self, api: &::TsApi, server: &::Server,
-		plugin: String, message: String) { }
+		plugin: String, message: String, invoker: Option<&::Invoker>) { }
 
 	/// Called when the user enters a command in the chat box.
 	///

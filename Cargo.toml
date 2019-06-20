@@ -27,7 +27,7 @@ default = []
 [dependencies]
 chrono = "0.4"
 lazy_static = "0.2"
-ts3plugin-sys = "0.3"
+ts3plugin-sys = "0.4"
 
 [build-dependencies]
 error-chain = "0.10"

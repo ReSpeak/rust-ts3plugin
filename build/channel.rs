@@ -9,7 +9,7 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		m.insert("String", "ChannelData::get_property_as_string");
 		m
 	};
-	let transmutable = vec!["CodecType"];
+	let transmutable = vec!["CodecType", "HostbannerMode"];
 
 	let builder = PropertyBuilder::new()
 		.functions(default_functions)
@@ -61,7 +61,8 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_i32.name("forced_silence").finalize(),
 			builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
 			builder_i32.name("icon_id").finalize(),
-			builder_bool.name("private").value_name("FlagPrivate").finalize(),
+			builder_string.name("banner_gfx_url").value_name("BannerGfxUrl").finalize(),
+			builder.name("banner_mode").value_name("BannerMode").type_s("HostbannerMode").finalize(),
 			// Requested
 			builder_string.name("description").requested(true).finalize(),
 		]).finalize();
