@@ -73,13 +73,11 @@ macro_rules! to_cstring {
 	};
 }
 
+// TODO Requested strings need to be freed somewhere
 /// Converts a CString to a normal string.
 macro_rules! to_string {
 	($string: expr) => {{
-		let res = String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned();
-		(::TS3_FUNCTIONS.as_ref().expect("Functions should be loaded")
-			.free_memory)($string as *mut ::std::os::raw::c_void);
-		res
+		String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned()
 	}};
 }
 
