@@ -5,6 +5,7 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 	let default_functions = {
 		let mut m = Map::new();
 		m.insert("i32", "ServerData::get_property_as_int");
+		m.insert("u64", "ServerData::get_property_as_uint64");
 		m.insert("String", "ServerData::get_property_as_string");
 		m
 	};
@@ -46,13 +47,13 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_string.name("version").finalize(),
 			builder_string.name("nickname").finalize(),
 			builder_string.name("accounting_token").finalize(),
-			// FIXME Always zero when queried as string, int or uint64
+			// TODO Always zero when queried as string, int or uint64
 			builder.name("created").type_s("DateTime<Utc>").finalize(),
 			builder.name("codec_encryption_mode").type_s("CodecEncryptionMode").finalize(),
 			// TODO Update
-			builder.name("default_server_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
-			builder.name("default_channel_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
-			builder.name("default_channel_admin_group").type_s("Permissions").update("Ok(Permissions)").finalize(),
+			builder.name("default_server_group").type_s("ServerGroupId").finalize(),
+			builder.name("default_channel_group").type_s("ChannelGroupId").finalize(),
+			builder.name("default_channel_admin_group").type_s("ChannelGroupId").finalize(),
 			// End TODO Update
 			builder_string.name("hostbanner_url").finalize(),
 			builder_string.name("hostbanner_gfx_url").finalize(),

@@ -74,10 +74,10 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			client_b.name("output_hardware").type_s("HardwareOutputStatus").finalize(),
 			client_b_string.name("phonetic_name").value_name("NicknamePhonetic").finalize(),
 			client_b.name("recording").type_s("bool").value_name("IsRecording").finalize(),
-			client_b.name("database_id").type_s("Permissions")
+			client_b.name("database_id").type_s("u64")
 				.documentation("Only valid data if we have the appropriate permissions.").finalize(),
-			client_b.name("channel_group_id").type_s("Permissions").finalize(),
-			client_b.name("server_groups").type_s("Vec<Permissions>").finalize(),
+			client_b.name("channel_group_id").type_s("ChannelGroupId").finalize(),
+			client_b.name("server_groups").type_s("Vec<ServerGroupId>").finalize(),
 			client_b.name("talk_power").type_s("i32").finalize(),
 			// When this client requested to talk
 			client_b.name("talk_request").type_s("DateTime<Utc>").finalize(),

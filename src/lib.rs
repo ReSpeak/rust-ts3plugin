@@ -1,9 +1,12 @@
-//! TeamSpeak 3.1 updates the plugin api version from 20 to 21.
-//! Version 0.2 of this crate and above are compatible with the api version 21
-//! while version 0.1 is compatible with the api version 20.
+//! TeamSpeak 3.3 updates the plugin api version from 22 to 23.
+//! Version 0.4 and above are compatible with this version.
 //!
-//! Breaking changes will happen from time to time, leading to a minor version
-//! bump (rust semver).
+//! TeamSpeak 3.1.1 updates the plugin api version from 21 to 22 but stays
+//! backwards compatible so plugins with version 21 can still be loaded.
+//!
+//! TeamSpeak 3.1 updates the plugin api version from 20 to 21.
+//! Version 0.2 and 0.3 are compatible with this version while version 0.1 is
+//! compatible with the api version 20.
 //!
 //! At the moment, not all methods that are exposed by the TeamSpeak API are
 //! available for plugins. If a method that you need is missing, please file an
