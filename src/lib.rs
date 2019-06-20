@@ -88,8 +88,9 @@ use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::mem::transmute;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int};
+use std::sync::MutexGuard;
 use chrono::*;
 
 /// Converts a normal `String` to a `CString`.
@@ -115,6 +116,13 @@ pub mod plugin;
 include!(concat!(env!("OUT_DIR"), "/channel.rs"));
 include!(concat!(env!("OUT_DIR"), "/connection.rs"));
 include!(concat!(env!("OUT_DIR"), "/server.rs"));
+
+/// The api functions provided by TeamSpeak
+///
+/// This is not part of the official api and is only public to permit dirty
+/// hacks!
+#[doc(hidden)]
+pub static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
 
 // ******************** Structs ********************
 /// The possible receivers of a message. A message can be sent to a specific
@@ -936,10 +944,37 @@ impl<'a> Connection<'a> {
 }
 
 
-// ********** TsApi **********
-/// The api functions provided by TeamSpeak
-static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
+pub struct TsApiLock {
+	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+}
+impl Deref for TsApiLock {
+	type Target = TsApi;
+	fn deref(&self) -> &Self::Target {
+		&self.guard.0.as_ref().unwrap().0
+	}
+}
+impl DerefMut for TsApiLock {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.guard.0.as_mut().unwrap().0
+	}
+}
 
+pub struct PluginLock {
+	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+}
+impl Deref for PluginLock {
+	type Target = Plugin;
+	fn deref(&self) -> &Self::Target {
+		&*self.guard.0.as_ref().unwrap().1
+	}
+}
+impl DerefMut for PluginLock {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut *self.guard.0.as_mut().unwrap().1
+	}
+}
+
+// ********** TsApi **********
 /// The main struct that contains all permanently save data.
 pub struct TsApi {
 	/// All known servers.
@@ -986,6 +1021,27 @@ impl TsApi {
 			_ => return Err(res)
 		}
 		Ok(())
+	}
+
+	/// Lock the global `TsApi` object. This will be `None` when the plugin is
+	/// constructed.
+	pub fn lock_api() -> Option<TsApiLock> {
+		let guard = ts3interface::DATA.lock().unwrap();
+		if guard.0.is_none() {
+			None
+		} else {
+			Some(TsApiLock { guard })
+		}
+	}
+
+	/// Lock the global `Plugin` object.
+	pub fn lock_plugin() -> Option<PluginLock> {
+		let guard = ts3interface::DATA.lock().unwrap();
+		if guard.0.is_none() {
+			None
+		} else {
+			Some(PluginLock { guard })
+		}
 	}
 
 	/// Please try to use the member method `log_message` instead of this static method.
