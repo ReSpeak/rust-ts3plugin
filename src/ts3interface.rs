@@ -64,7 +64,7 @@ pub unsafe fn private_init<T: Plugin>() -> Result<(), ::InitError> {
 #[no_mangle]
 #[doc(hidden)]
 pub extern "C" fn ts3plugin_apiVersion() -> c_int {
-	21
+	23
 }
 
 #[allow(non_snake_case)]
@@ -1124,15 +1124,25 @@ pub unsafe extern "C" fn ts3plugin_onEditCapturedVoiceDataEvent(server_id: u64,
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onPluginCommandEvent(server_id: u64,
-	plugin_name: *const c_char, plugin_command: *const c_char) {
+	plugin_name: *const c_char, plugin_command: *const c_char,
+	invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char) {
 	let server_id = ::ServerId(server_id);
+	let invoker = if invoker_id == 0 {
+		None
+	} else {
+		Some(::InvokerData::new(::ConnectionId(invoker_id), to_string!(invoker_uid), to_string!(invoker_name)))
+	};
 	let mut data = DATA.lock().unwrap();
 	let data = data.0.as_mut().unwrap();
 	let api = &mut data.0;
 	let plugin = &mut data.1;
+	if let Some(ref invoker) = invoker {
+		api.try_update_invoker(server_id, invoker);
+	}
 	let server = api.get_server_unwrap(server_id);
 	plugin.plugin_message(api, &server, to_string!(plugin_name),
-		to_string!(plugin_command));
+		to_string!(plugin_command),
+		invoker.map(|i| ::Invoker::new(server.clone(), i)).as_ref());
 }
 
 #[allow(non_snake_case)]
