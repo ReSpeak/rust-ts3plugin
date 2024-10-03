@@ -1,4 +1,4 @@
-use ::*;
+use *;
 
 pub(crate) fn create() -> Vec<Struct<'static>> {
 	// Map types to functions that will get that type
@@ -9,8 +9,7 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		m.insert("String", "ServerData::get_property_as_string");
 		m
 	};
-	let transmutable = vec!["CodecEncryptionMode", "HostbannerMode",
-		"HostmessageMode"];
+	let transmutable = vec!["CodecEncryptionMode", "HostbannerMode", "HostmessageMode"];
 
 	let builder = PropertyBuilder::new()
 		.functions(default_functions)
@@ -31,16 +30,32 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 		.do_api_impl(true)
 		.do_properties(true)
 		.constructor_args("id: ServerId")
-		.extra_property_list(vec![("Connection<'a>".into(), "Connection".into(), "OwnConnection,".into())])
-		.extra_properties("\
-			ServerProperty::Connection {\n\
-				\tproperty: ServerConnectionProperty::OwnConnection,\n\
-				\tdata: self.get_own_connection(),\n\
-			},")
+		.extra_property_list(vec![(
+			"Connection<'a>".into(),
+			"Connection".into(),
+			"OwnConnection,".into(),
+		)])
+		.extra_properties(
+			"\
+			ServerProperty::Connection {\n\tproperty: ServerConnectionProperty::OwnConnection,\n\tdata: \
+			 self.get_own_connection(),\n},",
+		)
 		.properties(vec![
-			builder.name("id").type_s("ServerId").result(false).initialisation("id").should_update(false).api_getter(false).finalize(),
+			builder
+				.name("id")
+				.type_s("ServerId")
+				.result(false)
+				.initialisation("id")
+				.should_update(false)
+				.api_getter(false)
+				.finalize(),
 			builder_string.name("uid").value_name("UniqueIdentifier").finalize(),
-			builder.name("own_connection_id").type_s("ConnectionId").update("Self::query_own_connection_id(self.id)").api_getter(false).finalize(),
+			builder
+				.name("own_connection_id")
+				.type_s("ConnectionId")
+				.update("Self::query_own_connection_id(self.id)")
+				.api_getter(false)
+				.finalize(),
 			builder_string.name("name").finalize(),
 			builder_string.name("phonetic_name").value_name("NamePhonetic").finalize(),
 			builder_string.name("platform").finalize(),
@@ -67,9 +82,20 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_i32.name("reserved_slots").finalize(),
 			builder.name("ask_for_privilegekey").type_s("bool").finalize(),
 			builder.name("channel_temp_delete_delay_default").type_s("Duration").finalize(),
-			builder.name("visible_connections").type_s("Map<ConnectionId, ConnectionData>").result(false).initialisation("Map::new()").update("Self::query_connections(self.id)").api_getter(false).finalize(),
-			builder.name("channels").type_s("Map<ChannelId, ChannelData>").update("Self::query_channels(self.id)").api_getter(false).finalize(),
-
+			builder
+				.name("visible_connections")
+				.type_s("Map<ConnectionId, ConnectionData>")
+				.result(false)
+				.initialisation("Map::new()")
+				.update("Self::query_connections(self.id)")
+				.api_getter(false)
+				.finalize(),
+			builder
+				.name("channels")
+				.type_s("Map<ChannelId, ChannelData>")
+				.update("Self::query_channels(self.id)")
+				.api_getter(false)
+				.finalize(),
 			// TODO requested
 			builder_string_r.name("welcome_message").value_name("Welcomemessage").finalize(),
 			builder_i32_r.name("max_clients").finalize(),
@@ -112,11 +138,18 @@ pub(crate) fn create() -> Vec<Struct<'static>> {
 			builder_i32_r.name("total_packetloss_total").finalize(),
 			builder_i32_r.name("total_ping").finalize(),
 			builder_r.name("weblist_enabled").type_s("bool").finalize(),
-
-			builder_string.name("hostmessage").documentation("Only set on connect and not updated").finalize(),
-			builder.name("hostmessage_mode").type_s("HostmessageMode").documentation("Only set on connect and not updated").finalize(),
+			builder_string
+				.name("hostmessage")
+				.documentation("Only set on connect and not updated")
+				.finalize(),
+			builder
+				.name("hostmessage_mode")
+				.type_s("HostmessageMode")
+				.documentation("Only set on connect and not updated")
+				.finalize(),
 			builder_i32.name("antiflood_points_needed_plugin_block").finalize(),
-		]).finalize();
+		])
+		.finalize();
 
 	vec![server]
 }

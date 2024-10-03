@@ -71,8 +71,8 @@
 
 // TODO This should be removed at some time, when more code is ready
 #![allow(dead_code)]
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 extern crate chrono;
 #[macro_use]
@@ -87,6 +87,7 @@ pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
 pub use plugin::*;
 
+use chrono::*;
 use std::collections::HashMap as Map;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -94,13 +95,11 @@ use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int};
 use std::sync::MutexGuard;
-use chrono::*;
 
 /// Converts a normal `String` to a `CString`.
 macro_rules! to_cstring {
 	($string: expr) => {
-		CString::new($string).unwrap_or(
-			CString::new("String contains null character").unwrap())
+		CString::new($string).unwrap_or(CString::new("String contains null character").unwrap())
 	};
 }
 
@@ -112,8 +111,8 @@ macro_rules! to_string {
 }
 
 // Declare modules here so the macros are visible in the modules
-pub mod ts3interface;
 pub mod plugin;
+pub mod ts3interface;
 
 // Import automatically generated structs
 include!(concat!(env!("OUT_DIR"), "/channel.rs"));
@@ -171,7 +170,6 @@ pub struct ChannelGroup {}
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ChannelGroupId(u64);
 
-
 // ******************** Implementation ********************
 
 // ********** Invoker **********
@@ -183,34 +181,22 @@ pub struct InvokerData {
 }
 
 impl PartialEq<InvokerData> for InvokerData {
-	fn eq(&self, other: &InvokerData) -> bool {
-		self.id == other.id
-	}
+	fn eq(&self, other: &InvokerData) -> bool { self.id == other.id }
 }
 
 impl InvokerData {
 	fn new(id: ConnectionId, uid: String, name: String) -> InvokerData {
-		InvokerData {
-			id,
-			uid,
-			name,
-		}
+		InvokerData { id, uid, name }
 	}
 
 	/// Get the connection id of this invoker.
-	pub fn get_id(&self) -> ConnectionId {
-		self.id
-	}
+	pub fn get_id(&self) -> ConnectionId { self.id }
 
 	/// Get the unique id of this invoker.
-	pub fn get_uid(&self) -> &String {
-		&self.uid
-	}
+	pub fn get_uid(&self) -> &String { &self.uid }
 
 	/// Get the name of this invoker.
-	pub fn get_name(&self) -> &String {
-		&self.name
-	}
+	pub fn get_name(&self) -> &String { &self.name }
 }
 
 /// The invoker is maybe not visible to the user, but we can get events caused
@@ -222,28 +208,17 @@ pub struct Invoker<'a> {
 }
 
 impl<'a, 'b> PartialEq<Invoker<'b>> for Invoker<'a> {
-	fn eq(&self, other: &Invoker) -> bool {
-		self.server == other.server && self.data == other.data
-	}
+	fn eq(&self, other: &Invoker) -> bool { self.server == other.server && self.data == other.data }
 }
 impl<'a> Deref for Invoker<'a> {
 	type Target = InvokerData;
-	fn deref(&self) -> &Self::Target {
-		&self.data
-	}
+	fn deref(&self) -> &Self::Target { &self.data }
 }
 
 impl<'a> Invoker<'a> {
-	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> {
-		Invoker {
-			server,
-			data,
-		}
-	}
+	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> { Invoker { server, data } }
 
-	pub fn get_connection(&self) -> Option<Connection> {
-		self.server.get_connection(self.id)
-	}
+	pub fn get_connection(&self) -> Option<Connection> { self.server.get_connection(self.id) }
 }
 
 // ********** Server **********
@@ -254,9 +229,7 @@ pub struct Server<'a> {
 }
 
 impl<'a, 'b> PartialEq<Server<'b>> for Server<'a> {
-	fn eq(&self, other: &Server<'b>) -> bool {
-		self.get_id() == other.get_id()
-	}
+	fn eq(&self, other: &Server<'b>) -> bool { self.get_id() == other.get_id() }
 }
 impl<'a> Eq for Server<'a> {}
 impl<'a> fmt::Debug for Server<'a> {
@@ -266,23 +239,25 @@ impl<'a> fmt::Debug for Server<'a> {
 }
 
 impl PartialEq<ServerData> for ServerData {
-	fn eq(&self, other: &ServerData) -> bool {
-		self.id == other.id
-	}
+	fn eq(&self, other: &ServerData) -> bool { self.id == other.id }
 }
 impl Eq for ServerData {}
 
 impl ServerData {
 	/// Get a server property that is stored as a string.
-	fn get_property_as_string(id: ServerId, property: VirtualServerProperties) -> Result<String, Error> {
+	fn get_property_as_string(
+		id: ServerId, property: VirtualServerProperties,
+	) -> Result<String, Error> {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_server_variable_as_string)
-					(id.0, property as usize, &mut name));
+			let res: Error =
+				transmute((TS3_FUNCTIONS
+					.as_ref()
+					.expect("Functions should be loaded")
+					.get_server_variable_as_string)(id.0, property as usize, &mut name));
 			match res {
 				Error::Ok => Ok(to_string!(name)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -291,26 +266,33 @@ impl ServerData {
 	fn get_property_as_int(id: ServerId, property: VirtualServerProperties) -> Result<i32, Error> {
 		unsafe {
 			let mut number: c_int = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_server_variable_as_int)
-					(id.0, property as usize, &mut number));
+			let res: Error =
+				transmute((TS3_FUNCTIONS
+					.as_ref()
+					.expect("Functions should be loaded")
+					.get_server_variable_as_int)(id.0, property as usize, &mut number));
 			match res {
 				Error::Ok => Ok(number as i32),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a server property that is stored as an int.
-	fn get_property_as_uint64(id: ServerId, property: VirtualServerProperties) -> Result<u64, Error> {
+	fn get_property_as_uint64(
+		id: ServerId, property: VirtualServerProperties,
+	) -> Result<u64, Error> {
 		unsafe {
 			let mut number: u64 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_server_variable_as_uint64)
-					(id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_server_variable_as_uint64)(
+				id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -320,12 +302,13 @@ impl ServerData {
 	fn query_own_connection_id(id: ServerId) -> Result<ConnectionId, Error> {
 		unsafe {
 			let mut number: u16 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_client_id)
-					(id.0, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_client_id)(id.0, &mut number));
 			match res {
 				Error::Ok => Ok(ConnectionId(number)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -337,9 +320,13 @@ impl ServerData {
 		let mut map = Map::new();
 		// Query connected connections
 		let mut result: *mut u16 = std::ptr::null_mut();
-		let res: Error = unsafe { transmute((TS3_FUNCTIONS.as_ref()
-			.expect("Functions should be loaded").get_client_list)
-				(id.0, &mut result)) };
+		let res: Error =
+			unsafe {
+				transmute((TS3_FUNCTIONS
+					.as_ref()
+					.expect("Functions should be loaded")
+					.get_client_list)(id.0, &mut result))
+			};
 		if res == Error::Ok {
 			unsafe {
 				let mut counter = 0;
@@ -362,9 +349,12 @@ impl ServerData {
 		let mut map = Map::new();
 		// Query connected connections
 		let mut result: *mut u64 = std::ptr::null_mut();
-		let res: Error = unsafe { transmute((TS3_FUNCTIONS.as_ref()
-			.expect("Functions should be loaded").get_channel_list)
-				(id.0, &mut result)) };
+		let res: Error = unsafe {
+			transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_channel_list)(id.0, &mut result))
+		};
 		if res == Error::Ok {
 			unsafe {
 				let mut counter = 0;
@@ -425,18 +415,10 @@ impl ServerData {
 }
 
 impl<'a> Server<'a> {
-	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> {
-		Server {
-			api,
-			data: Ok(data),
-		}
-	}
+	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> { Server { api, data: Ok(data) } }
 
 	fn new_err(api: &'a TsApi, server_id: ServerId) -> Server<'a> {
-		Server {
-			api,
-			data: Err(server_id),
-		}
+		Server { api, data: Err(server_id) }
 	}
 
 	pub fn get_id(&self) -> ServerId {
@@ -449,45 +431,44 @@ impl<'a> Server<'a> {
 	/// Get the connection on this server that has the specified id, returns
 	/// `None` if there is no such connection.
 	fn get_connection_unwrap(&self, connection_id: ConnectionId) -> Connection<'a> {
-		self.get_connection(connection_id)
-			.unwrap_or_else(|| {
-				self.api.log_or_print(
-					format!("Can't find connection {:?}", connection_id),
-					"rust-ts3plugin", ::LogLevel::Warning);
-				Connection::new_err(&self.api, self.get_id(), connection_id)
-			})
+		self.get_connection(connection_id).unwrap_or_else(|| {
+			self.api.log_or_print(
+				format!("Can't find connection {:?}", connection_id),
+				"rust-ts3plugin",
+				::LogLevel::Warning,
+			);
+			Connection::new_err(&self.api, self.get_id(), connection_id)
+		})
 	}
 
 	/// Get the channel on this server that has the specified id, returns
 	/// `None` if there is no such channel.
 	fn get_channel_unwrap(&self, channel_id: ChannelId) -> Channel<'a> {
-		self.get_channel(channel_id)
-			.unwrap_or_else(|| {
-				self.api.log_or_print(
-					format!("Can't find channel {:?}", channel_id),
-					"rust-ts3plugin", ::LogLevel::Warning);
-				Channel::new_owned(&self.api, self.get_id(), channel_id)
-			})
+		self.get_channel(channel_id).unwrap_or_else(|| {
+			self.api.log_or_print(
+				format!("Can't find channel {:?}", channel_id),
+				"rust-ts3plugin",
+				::LogLevel::Warning,
+			);
+			Channel::new_owned(&self.api, self.get_id(), channel_id)
+		})
 	}
 
-	fn get_server_group_unwrap(&self, server_group_id: ServerGroupId)
-		-> ServerGroup {
-		self.get_server_group(server_group_id)
-			.unwrap_or_else(|| {
-				/*self.api.log_or_print(
-					format!("Can't find server group {:?}", server_group_id),
-					"rust-ts3plugin", ::LogLevel::Warning);*/
-				ServerGroup { }
-			})
+	fn get_server_group_unwrap(&self, server_group_id: ServerGroupId) -> ServerGroup {
+		self.get_server_group(server_group_id).unwrap_or_else(|| {
+			/*self.api.log_or_print(
+			format!("Can't find server group {:?}", server_group_id),
+			"rust-ts3plugin", ::LogLevel::Warning);*/
+			ServerGroup {}
+		})
 	}
 
-	fn get_channel_group_unwrap(&self, channel_group_id: ChannelGroupId)
-		-> ChannelGroup {
-		self.get_channel_group(channel_group_id)
-			.unwrap_or_else(|| {
-				//self.api.log_or_print(format!("Can't find channel group {:?}", channel_group_id), "rust-ts3plugin", ::LogLevel::Warning);
-				ChannelGroup { }
-			})
+	fn get_channel_group_unwrap(&self, channel_group_id: ChannelGroupId) -> ChannelGroup {
+		self.get_channel_group(channel_group_id).unwrap_or_else(|| {
+			//self.api.log_or_print(format!("Can't find channel group {:?}", channel_group_id),
+			// "rust-ts3plugin", ::LogLevel::Warning);
+			ChannelGroup {}
+		})
 	}
 
 	// ********** Public Interface **********
@@ -508,8 +489,9 @@ impl<'a> Server<'a> {
 	/// Get the ids of all visible connections on this server.
 	pub fn get_connections(&self) -> Vec<Connection<'a>> {
 		match self.data {
-			Ok(data) => data.visible_connections.values()
-				.map(|c| Connection::new(self.api, &c)).collect(),
+			Ok(data) => {
+				data.visible_connections.values().map(|c| Connection::new(self.api, &c)).collect()
+			}
 			Err(_) => Vec::new(),
 		}
 	}
@@ -520,7 +502,7 @@ impl<'a> Server<'a> {
 			Ok(data) => match data.channels {
 				Ok(ref cs) => cs.values().map(|c| Channel::new(self.api, &c)).collect(),
 				Err(_) => Vec::new(),
-			}
+			},
 			Err(_) => Vec::new(),
 		}
 	}
@@ -528,27 +510,29 @@ impl<'a> Server<'a> {
 	/// Get the connection on this server that has the specified id, returns
 	/// `None` if there is no such connection.
 	pub fn get_connection(&self, connection_id: ConnectionId) -> Option<Connection<'a>> {
-		self.data.ok().and_then(|data|
-			data.visible_connections.get(&connection_id)
-				.map(|c| Connection::new(&self.api, c)))
+		self.data.ok().and_then(|data| {
+			data.visible_connections.get(&connection_id).map(|c| Connection::new(&self.api, c))
+		})
 	}
 
 	/// Get the channel on this server that has the specified id, returns
 	/// `None` if there is no such channel.
 	pub fn get_channel(&self, channel_id: ChannelId) -> Option<Channel<'a>> {
-		self.data.ok().and_then(|data|
-			data.channels.as_ref().ok().and_then(|cs| cs.get(&channel_id))
-				.map(|c| Channel::new(&self.api, c)))
+		self.data.ok().and_then(|data| {
+			data.channels
+				.as_ref()
+				.ok()
+				.and_then(|cs| cs.get(&channel_id))
+				.map(|c| Channel::new(&self.api, c))
+		})
 	}
 
-	pub fn get_server_group(&self, server_group_id: ServerGroupId)
-		-> Option<ServerGroup> {
+	pub fn get_server_group(&self, server_group_id: ServerGroupId) -> Option<ServerGroup> {
 		// TODO
 		None
 	}
 
-	pub fn get_channel_group(&self, channel_group_id: ChannelGroupId)
-		-> Option<ChannelGroup> {
+	pub fn get_channel_group(&self, channel_group_id: ChannelGroupId) -> Option<ChannelGroup> {
 		// TODO
 		None
 	}
@@ -557,12 +541,15 @@ impl<'a> Server<'a> {
 	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").request_send_server_text_msg)
-					(self.get_id().0, text.as_ptr(), std::ptr::null()));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.request_send_server_text_msg)(
+				self.get_id().0, text.as_ptr(), std::ptr::null()
+			));
 			match res {
 				Error::Ok => Ok(()),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -576,9 +563,14 @@ impl<'a> Server<'a> {
 	pub fn send_plugin_message<S: AsRef<str>>(&self, message: S) {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)
-					(self.get_id().0, to_cstring!(self.api.get_plugin_id()).as_ptr(), text.as_ptr(),
-					PluginTargetMode::Server as i32, std::ptr::null(), std::ptr::null());
+			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)(
+				self.get_id().0,
+				to_cstring!(self.api.get_plugin_id()).as_ptr(),
+				text.as_ptr(),
+				PluginTargetMode::Server as i32,
+				std::ptr::null(),
+				std::ptr::null(),
+			);
 		}
 	}
 
@@ -587,8 +579,11 @@ impl<'a> Server<'a> {
 	pub fn print_message<S: AsRef<str>>(&self, message: S, target: MessageTarget) {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").print_message)
-					(self.get_id().0, text.as_ptr(), target);
+			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").print_message)(
+				self.get_id().0,
+				text.as_ptr(),
+				target,
+			);
 		}
 	}
 }
@@ -602,8 +597,7 @@ pub struct Channel<'a> {
 
 impl<'a, 'b> PartialEq<Channel<'b>> for Channel<'a> {
 	fn eq(&self, other: &Channel<'b>) -> bool {
-		self.get_server_id() == other.get_server_id() &&
-			self.get_id() == other.get_id()
+		self.get_server_id() == other.get_server_id() && self.get_id() == other.get_id()
 	}
 }
 impl<'a> Eq for Channel<'a> {}
@@ -622,43 +616,58 @@ impl Eq for ChannelData {}
 
 impl ChannelData {
 	/// Get a channel property that is stored as a string.
-	fn get_property_as_string(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<String, Error> {
+	fn get_property_as_string(
+		server_id: ServerId, id: ChannelId, property: ChannelProperties,
+	) -> Result<String, Error> {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_channel_variable_as_string)
-					(server_id.0, id.0, property as usize, &mut name));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_channel_variable_as_string)(
+				server_id.0, id.0, property as usize, &mut name
+			));
 			match res {
 				Error::Ok => Ok(to_string!(name)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a channel property that is stored as an int.
-	fn get_property_as_int(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
+	fn get_property_as_int(
+		server_id: ServerId, id: ChannelId, property: ChannelProperties,
+	) -> Result<i32, Error> {
 		unsafe {
 			let mut number: c_int = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_channel_variable_as_int)
-					(server_id.0, id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_channel_variable_as_int)(
+				server_id.0, id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number as i32),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a channel property that is stored as an uint64.
-	fn get_property_as_uint64(server_id: ServerId, id: ChannelId, property: ChannelProperties) -> Result<i32, Error> {
+	fn get_property_as_uint64(
+		server_id: ServerId, id: ChannelId, property: ChannelProperties,
+	) -> Result<i32, Error> {
 		unsafe {
 			let mut number: u64 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_channel_variable_as_uint64)
-					(server_id.0, id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_channel_variable_as_uint64)(
+				server_id.0, id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number as i32),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -667,30 +676,24 @@ impl ChannelData {
 	fn query_parent_channel_id(server_id: ServerId, id: ChannelId) -> Result<ChannelId, Error> {
 		unsafe {
 			let mut number: u64 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_parent_channel_of_channel)
-					(server_id.0, id.0, &mut number));
+			let res: Error =
+				transmute((TS3_FUNCTIONS
+					.as_ref()
+					.expect("Functions should be loaded")
+					.get_parent_channel_of_channel)(server_id.0, id.0, &mut number));
 			match res {
 				Error::Ok => Ok(ChannelId(number)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 }
 
 impl<'a> Channel<'a> {
-	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> {
-		Channel {
-			api,
-			data: Ok(data),
-		}
-	}
+	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> { Channel { api, data: Ok(data) } }
 
 	fn new_owned(api: &'a TsApi, server_id: ServerId, channel_id: ChannelId) -> Channel<'a> {
-		Channel {
-			api,
-			data: Err((server_id, channel_id))
-		}
+		Channel { api, data: Err((server_id, channel_id)) }
 	}
 
 	fn get_server_id(&self) -> ServerId {
@@ -708,9 +711,7 @@ impl<'a> Channel<'a> {
 	}
 
 	/// Get the server of this channel.
-	pub fn get_server(&self) -> Server<'a> {
-		self.api.get_server_unwrap(self.get_server_id())
-	}
+	pub fn get_server(&self) -> Server<'a> { self.api.get_server_unwrap(self.get_server_id()) }
 
 	pub fn get_parent_channel(&self) -> Result<Option<Channel<'a>>, Error> {
 		match self.data {
@@ -729,12 +730,18 @@ impl<'a> Channel<'a> {
 	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").request_send_channel_text_msg)
-					(self.data.unwrap().server_id.0, text.as_ptr(), self.data.unwrap().id.0, std::ptr::null()));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.request_send_channel_text_msg)(
+				self.data.unwrap().server_id.0,
+				text.as_ptr(),
+				self.data.unwrap().id.0,
+				std::ptr::null(),
+			));
 			match res {
 				Error::Ok => Ok(()),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -749,8 +756,7 @@ pub struct Connection<'a> {
 
 impl<'a, 'b> PartialEq<Connection<'b>> for Connection<'a> {
 	fn eq(&self, other: &Connection<'b>) -> bool {
-		self.get_server_id() == other.get_server_id() &&
-			self.get_id() == other.get_id()
+		self.get_server_id() == other.get_server_id() && self.get_id() == other.get_id()
 	}
 }
 impl<'a> Eq for Connection<'a> {}
@@ -769,71 +775,96 @@ impl Eq for ConnectionData {}
 
 impl ConnectionData {
 	/// Get a connection property that is stored as a string.
-	fn get_connection_property_as_string(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<String, Error> {
+	fn get_connection_property_as_string(
+		server_id: ServerId, id: ConnectionId, property: ConnectionProperties,
+	) -> Result<String, Error> {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_connection_variable_as_string)
-					(server_id.0, id.0, property as usize, &mut name));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_connection_variable_as_string)(
+				server_id.0, id.0, property as usize, &mut name
+			));
 			match res {
 				Error::Ok => Ok(to_string!(name)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a connection property that is stored as a uint64.
-	fn get_connection_property_as_uint64(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<u64, Error> {
+	fn get_connection_property_as_uint64(
+		server_id: ServerId, id: ConnectionId, property: ConnectionProperties,
+	) -> Result<u64, Error> {
 		unsafe {
 			let mut number: u64 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_connection_variable_as_uint64)
-					(server_id.0, id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_connection_variable_as_uint64)(
+				server_id.0, id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a connection property that is stored as a double.
-	fn get_connection_property_as_double(server_id: ServerId, id: ConnectionId, property: ConnectionProperties) -> Result<f64, Error> {
+	fn get_connection_property_as_double(
+		server_id: ServerId, id: ConnectionId, property: ConnectionProperties,
+	) -> Result<f64, Error> {
 		unsafe {
 			let mut number: f64 = 0.0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_connection_variable_as_double)
-					(server_id.0, id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_connection_variable_as_double)(
+				server_id.0, id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a client property that is stored as a string.
-	fn get_client_property_as_string(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<String, Error> {
+	fn get_client_property_as_string(
+		server_id: ServerId, id: ConnectionId, property: ClientProperties,
+	) -> Result<String, Error> {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_client_variable_as_string)
-					(server_id.0, id.0, property as usize, &mut name));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_client_variable_as_string)(
+				server_id.0, id.0, property as usize, &mut name
+			));
 			match res {
 				Error::Ok => Ok(to_string!(name)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Get a client property that is stored as an int.
-	fn get_client_property_as_int(server_id: ServerId, id: ConnectionId, property: ClientProperties) -> Result<c_int, Error> {
+	fn get_client_property_as_int(
+		server_id: ServerId, id: ConnectionId, property: ClientProperties,
+	) -> Result<c_int, Error> {
 		unsafe {
 			let mut number: c_int = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_client_variable_as_int)
-					(server_id.0, id.0, property as usize, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_client_variable_as_int)(
+				server_id.0, id.0, property as usize, &mut number
+			));
 			match res {
 				Error::Ok => Ok(number),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -842,26 +873,29 @@ impl ConnectionData {
 	fn query_channel_id(server_id: ServerId, id: ConnectionId) -> Result<ChannelId, Error> {
 		unsafe {
 			let mut number: u64 = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_channel_of_client)
-					(server_id.0, id.0, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_channel_of_client)(server_id.0, id.0, &mut number));
 			match res {
 				Error::Ok => Ok(ChannelId(number)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
-	/// Ask the TeamSpeak api, if the specified connection is currently whispering to our own client.
+	/// Ask the TeamSpeak api, if the specified connection is currently whispering to our own
+	/// client.
 	fn query_whispering(server_id: ServerId, id: ConnectionId) -> Result<bool, Error> {
 		unsafe {
 			let mut number: c_int = 0;
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").is_whispering)
-					(server_id.0, id.0, &mut number));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.is_whispering)(server_id.0, id.0, &mut number));
 			match res {
 				Error::Ok => Ok(number != 0),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -869,17 +903,11 @@ impl ConnectionData {
 
 impl<'a> Connection<'a> {
 	fn new(api: &'a TsApi, data: &'a ConnectionData) -> Connection<'a> {
-		Connection {
-			api,
-			data: Ok(data),
-		}
+		Connection { api, data: Ok(data) }
 	}
 
 	fn new_err(api: &'a TsApi, server_id: ServerId, connection_id: ConnectionId) -> Connection<'a> {
-		Connection {
-			api,
-			data: Err((server_id, connection_id)),
-		}
+		Connection { api, data: Err((server_id, connection_id)) }
 	}
 
 	fn get_server_id(&self) -> ServerId {
@@ -897,9 +925,7 @@ impl<'a> Connection<'a> {
 	}
 
 	/// Get the server of this connection.
-	pub fn get_server(&self) -> Server<'a> {
-		self.api.get_server_unwrap(self.get_server_id())
-	}
+	pub fn get_server(&self) -> Server<'a> { self.api.get_server_unwrap(self.get_server_id()) }
 
 	/// Get the channel of this connection.
 	pub fn get_channel(&self) -> Result<Channel<'a>, Error> {
@@ -911,7 +937,9 @@ impl<'a> Connection<'a> {
 
 	pub fn get_channel_group_inherited_channel(&self) -> Result<Channel<'a>, Error> {
 		match self.data {
-			Ok(data) => data.get_channel_group_inherited_channel_id().map(|c| self.get_server().get_channel_unwrap(c)),
+			Ok(data) => data
+				.get_channel_group_inherited_channel_id()
+				.map(|c| self.get_server().get_channel_unwrap(c)),
 			Err(_) => Err(Error::Ok),
 		}
 	}
@@ -935,31 +963,32 @@ impl<'a> Connection<'a> {
 	pub fn send_message<S: AsRef<str>>(&self, message: S) -> Result<(), Error> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").request_send_private_text_msg)
-					(self.data.unwrap().server_id.0, text.as_ptr(), self.data.unwrap().id.0, std::ptr::null()));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.request_send_private_text_msg)(
+				self.data.unwrap().server_id.0,
+				text.as_ptr(),
+				self.data.unwrap().id.0,
+				std::ptr::null(),
+			));
 			match res {
 				Error::Ok => Ok(()),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 }
-
 
 pub struct TsApiLock {
 	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
 }
 impl Deref for TsApiLock {
 	type Target = TsApi;
-	fn deref(&self) -> &Self::Target {
-		&self.guard.0.as_ref().unwrap().0
-	}
+	fn deref(&self) -> &Self::Target { &self.guard.0.as_ref().unwrap().0 }
 }
 impl DerefMut for TsApiLock {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.guard.0.as_mut().unwrap().0
-	}
+	fn deref_mut(&mut self) -> &mut Self::Target { &mut self.guard.0.as_mut().unwrap().0 }
 }
 
 pub struct PluginLock {
@@ -967,14 +996,10 @@ pub struct PluginLock {
 }
 impl Deref for PluginLock {
 	type Target = Plugin;
-	fn deref(&self) -> &Self::Target {
-		&*self.guard.0.as_ref().unwrap().1
-	}
+	fn deref(&self) -> &Self::Target { &*self.guard.0.as_ref().unwrap().1 }
 }
 impl DerefMut for PluginLock {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut *self.guard.0.as_mut().unwrap().1
-	}
+	fn deref_mut(&mut self) -> &mut Self::Target { &mut *self.guard.0.as_mut().unwrap().1 }
 }
 
 // ********** TsApi **********
@@ -990,21 +1015,19 @@ pub struct TsApi {
 // to be publicly constructable.
 impl TsApi {
 	/// Create a new TsApi instance without loading anything.
-	fn new(plugin_id: String) -> TsApi {
-		TsApi {
-			servers: Map::new(),
-			plugin_id: plugin_id,
-		}
-	}
+	fn new(plugin_id: String) -> TsApi { TsApi { servers: Map::new(), plugin_id: plugin_id } }
 
 	/// Load all currently connected server and their data.
 	/// This should normally be executed after `new()`.
 	fn load(&mut self) -> Result<(), Error> {
 		// Query available connections
 		let mut result: *mut u64 = std::ptr::null_mut();
-		let res: Error = unsafe { transmute((TS3_FUNCTIONS.as_ref()
-			.expect("Functions should be loaded").get_server_connection_handler_list)
-				(&mut result)) };
+		let res: Error = unsafe {
+			transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_server_connection_handler_list)(&mut result))
+		};
 		match res {
 			Error::Ok => unsafe {
 				let mut counter = 0;
@@ -1012,16 +1035,21 @@ impl TsApi {
 					// Test if we have a connection to this server.
 					// We get open tabs, even if they are disconnected.
 					let mut status: c_int = 0;
-					let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-						.expect("Functions should be loaded").get_connection_status)
-							(*result.offset(counter), &mut status));
-					if res == Error::Ok && transmute::<c_int, ConnectStatus>(status) != ConnectStatus::Disconnected {
+					let res: Error = transmute((TS3_FUNCTIONS
+						.as_ref()
+						.expect("Functions should be loaded")
+						.get_connection_status)(
+						*result.offset(counter), &mut status
+					));
+					if res == Error::Ok
+						&& transmute::<c_int, ConnectStatus>(status) != ConnectStatus::Disconnected
+					{
 						self.add_server(ServerId(*result.offset(counter)));
 					}
 					counter += 1;
 				}
 			},
-			_ => return Err(res)
+			_ => return Err(res),
 		}
 		Ok(())
 	}
@@ -1030,42 +1058,49 @@ impl TsApi {
 	/// constructed.
 	pub fn lock_api() -> Option<TsApiLock> {
 		let guard = ts3interface::DATA.lock().unwrap();
-		if guard.0.is_none() {
-			None
-		} else {
-			Some(TsApiLock { guard })
-		}
+		if guard.0.is_none() { None } else { Some(TsApiLock { guard }) }
 	}
 
 	/// Lock the global `Plugin` object.
 	pub fn lock_plugin() -> Option<PluginLock> {
 		let guard = ts3interface::DATA.lock().unwrap();
-		if guard.0.is_none() {
-			None
-		} else {
-			Some(PluginLock { guard })
-		}
+		if guard.0.is_none() { None } else { Some(PluginLock { guard }) }
 	}
 
 	/// Please try to use the member method `log_message` instead of this static method.
-	pub fn static_log_message<S1: AsRef<str>, S2: AsRef<str>>(message: S1, channel: S2, severity: LogLevel) -> Result<(), Error> {
+	pub fn static_log_message<S1: AsRef<str>, S2: AsRef<str>>(
+		message: S1, channel: S2, severity: LogLevel,
+	) -> Result<(), Error> {
 		unsafe {
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").log_message)
-					(to_cstring!(message.as_ref()).as_ptr(),
-					severity, to_cstring!(channel.as_ref()).as_ptr(), 0));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.log_message)(
+				to_cstring!(message.as_ref()).as_ptr(),
+				severity,
+				to_cstring!(channel.as_ref()).as_ptr(),
+				0,
+			));
 			match res {
 				Error::Ok => Ok(()),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
 
 	/// Please try to use the member method `log_or_print` instead of this static method.
-	pub fn static_log_or_print<S1: AsRef<str>, S2: AsRef<str>>(message: S1, channel: S2, severity: LogLevel) {
-		if let Err(error) = TsApi::static_log_message(message.as_ref(), channel.as_ref(), severity) {
-			println!("Error {:?} while printing '{}' to '{}' ({:?})", error,
-				message.as_ref(), channel.as_ref(), severity);
+	pub fn static_log_or_print<S1: AsRef<str>, S2: AsRef<str>>(
+		message: S1, channel: S2, severity: LogLevel,
+	) {
+		if let Err(error) = TsApi::static_log_message(message.as_ref(), channel.as_ref(), severity)
+		{
+			println!(
+				"Error {:?} while printing '{}' to '{}' ({:?})",
+				error,
+				message.as_ref(),
+				channel.as_ref(),
+				severity
+			);
 		}
 	}
 
@@ -1073,12 +1108,13 @@ impl TsApi {
 	pub fn static_get_error_message(error: Error) -> Result<String, Error> {
 		unsafe {
 			let mut message: *mut c_char = std::ptr::null_mut();
-			let res: Error = transmute((TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_error_message)
-				(error as u32, &mut message));
+			let res: Error = transmute((TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_error_message)(error as u32, &mut message));
 			match res {
 				Error::Ok => Ok(to_string!(message)),
-				_ => Err(res)
+				_ => Err(res),
 			}
 		}
 	}
@@ -1150,15 +1186,13 @@ impl TsApi {
 	}
 
 	fn get_server_unwrap<'a>(&'a self, server_id: ServerId) -> Server<'a> {
-		self.servers.get(&server_id)
-			.map(|s| Server::<'a>::new(&self, s))
-			.unwrap_or_else(|| {
-				// Ignore here, there are too many messages when we are not yet
-				// fully connected (or already disconnected), but sound is sent.
-				// self.log_or_print(format!("Can't find server {:?}\n{:?}",
-				//     server_id, backtrace::Backtrace::new()), "rust-ts3plugin", ::LogLevel::Warning);
-				Server::new_err(&self, server_id)
-			})
+		self.servers.get(&server_id).map(|s| Server::<'a>::new(&self, s)).unwrap_or_else(|| {
+			// Ignore here, there are too many messages when we are not yet
+			// fully connected (or already disconnected), but sound is sent.
+			// self.log_or_print(format!("Can't find server {:?}\n{:?}",
+			//     server_id, backtrace::Backtrace::new()), "rust-ts3plugin", ::LogLevel::Warning);
+			Server::new_err(&self, server_id)
+		})
 	}
 
 	// ********** Public Interface **********
@@ -1167,14 +1201,10 @@ impl TsApi {
 	/// These functions can be used to invoke actions that are not yet
 	/// implemented by this library. You should file a bug report or make a pull
 	/// request if you need to use this function.
-	pub unsafe fn get_raw_api() -> &'static Ts3Functions {
-		TS3_FUNCTIONS.as_ref().unwrap()
-	}
+	pub unsafe fn get_raw_api() -> &'static Ts3Functions { TS3_FUNCTIONS.as_ref().unwrap() }
 
 	/// Get the plugin id assigned by TeamSpeak.
-	pub fn get_plugin_id(&self) -> &str {
-		&self.plugin_id
-	}
+	pub fn get_plugin_id(&self) -> &str { &self.plugin_id }
 
 	/// Get all servers to which this client is currently connected.
 	pub fn get_servers<'a>(&'a self) -> Vec<Server<'a>> {
@@ -1182,21 +1212,24 @@ impl TsApi {
 	}
 
 	/// Log a message using the TeamSpeak logging API.
-	pub fn log_message<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) -> Result<(), Error> {
+	pub fn log_message<S1: AsRef<str>, S2: AsRef<str>>(
+		&self, message: S1, channel: S2, severity: LogLevel,
+	) -> Result<(), Error> {
 		TsApi::static_log_message(message, channel, severity)
 	}
 
 	/// Log a message using the TeamSpeak logging API.
 	/// If that fails, print the message to stdout.
-	pub fn log_or_print<S1: AsRef<str>, S2: AsRef<str>>(&self, message: S1, channel: S2, severity: LogLevel) {
+	pub fn log_or_print<S1: AsRef<str>, S2: AsRef<str>>(
+		&self, message: S1, channel: S2, severity: LogLevel,
+	) {
 		TsApi::static_log_or_print(message, channel, severity)
 	}
 
 	/// Get the server that has the specified id, returns `None` if there is no
 	/// such server.
 	pub fn get_server(&self, server_id: ServerId) -> Option<Server> {
-		self.servers.get(&server_id)
-			.map(|s| Server::new(&self, s))
+		self.servers.get(&server_id).map(|s| Server::new(&self, s))
 	}
 
 	pub fn get_permission(&self, permission_id: PermissionId) -> Option<&Permission> {
@@ -1209,22 +1242,30 @@ impl TsApi {
 	pub fn print_message<S: AsRef<str>>(&self, message: S) {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").print_message_to_current_tab)
-					(text.as_ptr());
+			(TS3_FUNCTIONS
+				.as_ref()
+				.expect("Functions should be loaded")
+				.print_message_to_current_tab)(text.as_ptr());
 		}
 	}
 
 	/// Get the application path of the TeamSpeak executable.
 	pub fn get_app_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_app_path)(p, l))
+			TsApi::get_path(|p, l| {
+				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_app_path)(p, l)
+			})
 		}
 	}
 
 	/// Get the resource path of TeamSpeak.
 	pub fn get_resources_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_resources_path)(p, l))
+			TsApi::get_path(|p, l| {
+				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_resources_path)(
+					p, l,
+				)
+			})
 		}
 	}
 
@@ -1232,16 +1273,22 @@ impl TsApi {
 	/// This is e.g. `~/.ts3client` on linux or `%AppData%/TS3Client` on Windows.
 	pub fn get_config_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_config_path)(p, l))
+			TsApi::get_path(|p, l| {
+				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_config_path)(p, l)
+			})
 		}
 	}
 
 	/// Get the path where TeamSpeak plugins are stored.
 	pub fn get_plugin_path(&self) -> String {
 		unsafe {
-			TsApi::get_path(|p, l| (TS3_FUNCTIONS.as_ref()
-				.expect("Functions should be loaded").get_plugin_path)(p, l,
-				to_cstring!(self.plugin_id.as_str()).as_ptr()))
+			TsApi::get_path(|p, l| {
+				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_plugin_path)(
+					p,
+					l,
+					to_cstring!(self.plugin_id.as_str()).as_ptr(),
+				)
+			})
 		}
 	}
 }

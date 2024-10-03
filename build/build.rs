@@ -8,8 +8,8 @@ extern crate serde;
 extern crate tera;
 
 use std::borrow::Cow;
-use std::env;
 use std::collections::BTreeMap;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -74,7 +74,8 @@ struct Property<'a> {
 impl<'a> Property<'a> {
 	fn is_ref_type(&self) -> bool {
 		["String", "Permissions"].contains(&self.type_s.as_ref())
-			|| self.type_s.starts_with("Option") || self.type_s.starts_with("Map<")
+			|| self.type_s.starts_with("Option")
+			|| self.type_s.starts_with("Map<")
 			|| self.type_s.starts_with("Vec<")
 	}
 
@@ -83,7 +84,7 @@ impl<'a> Property<'a> {
 		let is_ref_type = self.is_ref_type();
 		let mut result_type = String::new();
 		if self.result {
-			result_type .push_str("Result<")
+			result_type.push_str("Result<")
 		}
 		if is_ref_type {
 			result_type.push('&');
@@ -134,11 +135,7 @@ impl<'a> Property<'a> {
 
 	fn create_constructor_body(&self) -> String {
 		let p = self.create_initialisation();
-		if p.is_empty() {
-			self.name.clone().into_owned()
-		} else {
-			p
-		}
+		if p.is_empty() { self.name.clone().into_owned() } else { p }
 	}
 
 	fn create_update_body(&self) -> String {
@@ -161,23 +158,36 @@ impl<'a> Property<'a> {
 		} else if self.initialisation.is_some() {
 			return self.initialisation.as_ref().unwrap().clone().into_owned();
 		}
-		let value_name = self.value_name.as_ref().map(|s| s.clone()).unwrap_or(to_pascal_case(self.name.as_ref()).into());
+		let value_name = self
+			.value_name
+			.as_ref()
+			.map(|s| s.clone())
+			.unwrap_or(to_pascal_case(self.name.as_ref()).into());
 		let mut s = String::new();
 		// Ignore unknown types
 		if let Some(function) = self.method_name.as_ref() {
 			// Special defined function
-			s.push_str(format!("{}({}{}::{})", function, default_args,
-				self.enum_name, value_name).as_str());
+			s.push_str(
+				format!("{}({}{}::{})", function, default_args, self.enum_name, value_name)
+					.as_str(),
+			);
 		} else if let Some(function) = self.functions.get(self.type_s.as_ref()) {
 			// From function list
-			s.push_str(format!("{}({}{}::{})", function, default_args,
-				self.enum_name, value_name).as_str());
+			s.push_str(
+				format!("{}({}{}::{})", function, default_args, self.enum_name, value_name)
+					.as_str(),
+			);
 		} else if self.transmutable.contains(&self.type_s) {
 			// Try to get an int
 			for t in &["i32", "u64"] {
 				if let Some(function) = self.functions.get(*t) {
-					s.push_str(format!("{}({}{}::{}).map(|v| unsafe {{ transmute(v) }})", function, default_args,
-						self.enum_name, value_name).as_str());
+					s.push_str(
+						format!(
+							"{}({}{}::{}).map(|v| unsafe {{ transmute(v) }})",
+							function, default_args, self.enum_name, value_name
+						)
+						.as_str(),
+					);
 					break;
 				}
 			}
@@ -192,9 +202,14 @@ impl<'a> Property<'a> {
 					} else {
 						"get_property_as_int"
 					};
-					s.push_str(format!("{}({}{}::{}).map(|d| Duration::seconds(d as i64))",
-						function, default_args, self.enum_name, value_name).as_str())
-				},
+					s.push_str(
+						format!(
+							"{}({}{}::{}).map(|d| Duration::seconds(d as i64))",
+							function, default_args, self.enum_name, value_name
+						)
+						.as_str(),
+					)
+				}
 				"DateTime<Utc>" => {
 					// Try to get an u64
 					let function: &str = if let Some(f) = self.functions.get("u64") {
@@ -204,14 +219,26 @@ impl<'a> Property<'a> {
 					} else {
 						"get_property_as_int"
 					};
-					s.push_str(format!("{}({}{}::{}).map(|d| DateTime::from_utc(chrono::NaiveDateTime::from_timestamp(d as i64, 0), chrono::Utc))",
-						function, default_args, self.enum_name, value_name).as_str())
-				},
+					s.push_str(
+						format!(
+							"{}({}{}::{}).map(|d| \
+							 DateTime::from_utc(chrono::NaiveDateTime::from_timestamp(d as i64, \
+							 0), chrono::Utc))",
+							function, default_args, self.enum_name, value_name
+						)
+						.as_str(),
+					)
+				}
 				"bool" => {
 					for t in &["i32", "u64"] {
 						if let Some(function) = self.functions.get(*t) {
-							s.push_str(format!("{}({}{}::{}).map(|v| v != 0)", function,
-								default_args, self.enum_name, value_name).as_str());
+							s.push_str(
+								format!(
+									"{}({}{}::{}).map(|v| v != 0)",
+									function, default_args, self.enum_name, value_name
+								)
+								.as_str(),
+							);
 							break;
 						}
 					}
@@ -224,16 +251,17 @@ impl<'a> Property<'a> {
 }
 
 impl<'a> serde::Serialize for Property<'a> {
-	fn serialize<S: serde::Serializer>(&self, serializer: S)
-		-> std::result::Result<S::Ok, S::Error> {
+	fn serialize<S: serde::Serializer>(
+		&self, serializer: S,
+	) -> std::result::Result<S::Ok, S::Error> {
 		let mut s = serializer.serialize_struct("Property", 22)?;
 
 		// Attributes
 		s.serialize_field("name", &self.name)?;
 		s.serialize_field("type_s", &self.type_s)?;
 		s.serialize_field("result", &self.result)?;
-		let documentation = self.documentation.lines()
-			.map(|l| format!("/// {}\n", l)).collect::<String>();
+		let documentation =
+			self.documentation.lines().map(|l| format!("/// {}\n", l)).collect::<String>();
 		s.serialize_field("documentation", &documentation)?;
 		s.serialize_field("initialise", &self.initialise)?;
 		s.serialize_field("initialisation", &self.initialisation)?;
@@ -359,7 +387,9 @@ impl<'a> PropertyBuilder<'a> {
 		res
 	}
 
-	fn functions<S1: Into<Cow<'a, str>>, S2: Into<Cow<'a, str>>>(&self, functions: Map<S1, S2>) -> PropertyBuilder<'a> {
+	fn functions<S1: Into<Cow<'a, str>>, S2: Into<Cow<'a, str>>>(
+		&self, functions: Map<S1, S2>,
+	) -> PropertyBuilder<'a> {
 		let mut res = self.clone();
 		res.functions = functions.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
 		res
@@ -377,7 +407,9 @@ impl<'a> PropertyBuilder<'a> {
 		res
 	}
 
-	fn default_args_update<S: Into<Cow<'a, str>>>(&self, default_args_update: S) -> PropertyBuilder<'a> {
+	fn default_args_update<S: Into<Cow<'a, str>>>(
+		&self, default_args_update: S,
+	) -> PropertyBuilder<'a> {
 		let mut res = self.clone();
 		res.default_args_update = default_args_update.into();
 		res
@@ -521,31 +553,41 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
-	fn extra_attributes<S: Into<Cow<'a, str>>>(&mut self, extra_attributes: S) -> StructBuilder<'a> {
+	fn extra_attributes<S: Into<Cow<'a, str>>>(
+		&mut self, extra_attributes: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_attributes = extra_attributes.into();
 		res
 	}
 
-	fn extra_initialisation<S: Into<Cow<'a, str>>>(&mut self, extra_initialisation: S) -> StructBuilder<'a> {
+	fn extra_initialisation<S: Into<Cow<'a, str>>>(
+		&mut self, extra_initialisation: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_initialisation = extra_initialisation.into();
 		res
 	}
 
-	fn extra_property_type<S: Into<Cow<'a, str>>>(&mut self, extra_property_type: S) -> StructBuilder<'a> {
+	fn extra_property_type<S: Into<Cow<'a, str>>>(
+		&mut self, extra_property_type: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_property_type = extra_property_type.into();
 		res
 	}
 
-	fn extra_property_list(&mut self, extra_property_list: Vec<(Cow<'a, str>, Cow<'a, str>, Cow<'a, str>)>) -> StructBuilder<'a> {
+	fn extra_property_list(
+		&mut self, extra_property_list: Vec<(Cow<'a, str>, Cow<'a, str>, Cow<'a, str>)>,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_property_list = extra_property_list;
 		res
 	}
 
-	fn extra_properties<S: Into<Cow<'a, str>>>(&mut self, extra_properties: S) -> StructBuilder<'a> {
+	fn extra_properties<S: Into<Cow<'a, str>>>(
+		&mut self, extra_properties: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_properties = extra_properties.into();
 		res
@@ -557,13 +599,17 @@ impl<'a> StructBuilder<'a> {
 		res
 	}
 
-	fn extra_implementation<S: Into<Cow<'a, str>>>(&mut self, extra_implementation: S) -> StructBuilder<'a> {
+	fn extra_implementation<S: Into<Cow<'a, str>>>(
+		&mut self, extra_implementation: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.extra_implementation = extra_implementation.into();
 		res
 	}
 
-	fn constructor_args<S: Into<Cow<'a, str>>>(&mut self, constructor_args: S) -> StructBuilder<'a> {
+	fn constructor_args<S: Into<Cow<'a, str>>>(
+		&mut self, constructor_args: S,
+	) -> StructBuilder<'a> {
 		let mut res = self.clone();
 		res.constructor_args = constructor_args.into();
 		res
@@ -638,7 +684,9 @@ impl<'a> StructBuilder<'a> {
 }
 
 impl<'a> Struct<'a> {
-	fn create_struct(&self, f: &mut Write, tera: &Tera, all_structs: &[&Struct<'static>]) -> Result<()> {
+	fn create_struct(
+		&self, f: &mut Write, tera: &Tera, all_structs: &[&Struct<'static>],
+	) -> Result<()> {
 		let mut context = tera::Context::new();
 		context.insert("s", &self);
 		context.insert("all_structs", &all_structs);
@@ -680,15 +728,16 @@ impl<'a> Struct<'a> {
 }
 
 impl<'a> serde::Serialize for Struct<'a> {
-	fn serialize<S: serde::Serializer>(&self, serializer: S)
-		-> std::result::Result<S::Ok, S::Error> {
+	fn serialize<S: serde::Serializer>(
+		&self, serializer: S,
+	) -> std::result::Result<S::Ok, S::Error> {
 		let mut s = serializer.serialize_struct("Struct", 19)?;
 
 		// Attributes
 		s.serialize_field("name", &self.name)?;
 		s.serialize_field("api_name", &self.api_name)?;
-		let documentation = self.documentation.lines()
-			.map(|l| format!("/// {}\n", l)).collect::<String>();
+		let documentation =
+			self.documentation.lines().map(|l| format!("/// {}\n", l)).collect::<String>();
 		s.serialize_field("documentation", &documentation)?;
 		s.serialize_field("properties", &self.properties)?;
 		s.serialize_field("extra_attributes", &self.extra_attributes)?;
@@ -714,8 +763,9 @@ impl<'a> serde::Serialize for Struct<'a> {
 // Build parts of lib.rs as most of the structs are very repetitive
 quick_main!(|| -> Result<()> {
 	let out_dir = env::var("OUT_DIR")?;
-	for f in &["build.rs", "channel.rs", "connection.rs", "server.rs",
-		"struct.rs.tera", "macros.tera"] {
+	for f in
+		&["build.rs", "channel.rs", "connection.rs", "server.rs", "struct.rs.tera", "macros.tera"]
+	{
 		println!("cargo:rerun-if-changed=build/{}", f);
 	}
 
@@ -757,11 +807,7 @@ quick_main!(|| -> Result<()> {
 	let server_f = File::create(&path.join("server.rs"))?;
 
 	let mut files = vec![channel_f, connection_f, server_f];
-	let structs = vec![
-		channel::create(),
-		connection::create(),
-		server::create(),
-	];
+	let structs = vec![channel::create(), connection::create(), server::create()];
 
 	let mut all_structs = Vec::new();
 	for s in &structs {
