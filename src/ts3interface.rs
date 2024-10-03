@@ -4,7 +4,7 @@ use std::os::raw::{c_char, c_int, c_short, c_uint};
 use std::slice;
 use std::sync::Mutex;
 
-use ts3plugin_sys::clientlib_publicdefinitions::*;
+use ts3plugin_sys::public_definitions::*;
 use ts3plugin_sys::ts3functions::Ts3Functions;
 
 use plugin::Plugin;
@@ -66,7 +66,7 @@ pub unsafe fn private_init<T: Plugin>() -> Result<(), ::InitError> {
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn ts3plugin_apiVersion() -> c_int { 23 }
+pub extern "C" fn ts3plugin_apiVersion() -> c_int { 26 }
 
 #[allow(non_snake_case)]
 #[no_mangle]

@@ -1,16 +1,9 @@
-TeamSpeak3 Plugin API &emsp; [![Build Status](https://travis-ci.org/Flakebi/rust-ts3plugin.svg?branch=master)](https://travis-ci.org/Flakebi/rust-ts3plugin) [![Latest version](https://img.shields.io/crates/v/ts3plugin.svg)](https://crates.io/crates/ts3plugin)
+TeamSpeak3 Plugin API &emsp; [![Latest version](https://img.shields.io/crates/v/ts3plugin.svg)](https://crates.io/crates/ts3plugin)
 =====================
 The documentation can be found here: [![At docs.rs](https://docs.rs/ts3plugin/badge.svg)](https://docs.rs/ts3plugin)
 
-TeamSpeak 3.3 updates the plugin api version from 22 to 23.
-Version 0.4 and above are compatible with this version.
-
-TeamSpeak 3.1.1 updates the plugin api version from 21 to 22 but stays
-backwards compatible so plugins with version 21 can still be loaded.
-
-TeamSpeak 3.1 updates the plugin api version from 20 to 21.
-Version 0.2 and 0.3 are compatible with this version while version 0.1 is
-compatible with the api version 20.
+TeamSpeak 3.6 updates the plugin api version to 26.
+Version 0.3 is compatible with this version.
 
 At the moment, not all methods that are exposed by the TeamSpeak API are
 available for plugins. If a method that you need is missing, please file an
@@ -74,8 +67,8 @@ create_plugin!(MyTsPlugin);
 
 Projects using this library
 ---------------------------
- - [TeamSpeak3 Text to Speech](https://github.com/Flakebi/ts3tts)
- - [TsPressor](https://github.com/Splamy/TsPressor)
+ - [TeamSpeak3 Text to Speech](https://github.com/ReSpeak/ts3tts)
+ - [TsPressor](https://github.com/ReSpeak/TsPressor)
 
 License
 -------

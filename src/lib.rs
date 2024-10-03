@@ -1,12 +1,5 @@
-//! TeamSpeak 3.3 updates the plugin api version from 22 to 23.
-//! Version 0.4 and above are compatible with this version.
-//!
-//! TeamSpeak 3.1.1 updates the plugin api version from 21 to 22 but stays
-//! backwards compatible so plugins with version 21 can still be loaded.
-//!
-//! TeamSpeak 3.1 updates the plugin api version from 20 to 21.
-//! Version 0.2 and 0.3 are compatible with this version while version 0.1 is
-//! compatible with the api version 20.
+//! TeamSpeak 3.6 updates the plugin api version to 26.  
+//! Version 0.3 is compatible with this version.
 //!
 //! At the moment, not all methods that are exposed by the TeamSpeak API are
 //! available for plugins. If a method that you need is missing, please file an
@@ -79,7 +72,6 @@ extern crate chrono;
 extern crate lazy_static;
 extern crate ts3plugin_sys;
 
-pub use ts3plugin_sys::clientlib_publicdefinitions::*;
 pub use ts3plugin_sys::plugin_definitions::*;
 pub use ts3plugin_sys::public_definitions::*;
 pub use ts3plugin_sys::public_errors::Error;
