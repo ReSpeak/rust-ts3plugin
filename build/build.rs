@@ -1,36 +1,22 @@
 // Limit for error_chain
 #![recursion_limit = "1024"]
 
-#[macro_use]
-extern crate error_chain;
+extern crate anyhow;
 extern crate serde;
-#[macro_use]
 extern crate tera;
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use anyhow::Result;
 use serde::ser::SerializeStruct;
 use tera::Tera;
 
 type Map<K, V> = BTreeMap<K, V>;
-
-#[allow(unused_doc_comments)]
-mod errors {
-	// Create the Error, ErrorKind, ResultExt, and Result types
-	error_chain! {
-		foreign_links {
-			Io(::std::io::Error);
-			EnvVar(::std::env::VarError);
-			Tera(::tera::Error);
-		}
-	}
-}
-use errors::*;
 
 mod channel;
 mod connection;
@@ -221,9 +207,7 @@ impl<'a> Property<'a> {
 					};
 					s.push_str(
 						format!(
-							"{}({}{}::{}).map(|d| \
-							 DateTime::from_utc(chrono::NaiveDateTime::from_timestamp(d as i64, \
-							 0), chrono::Utc))",
+							"{}({}{}::{}).map(|d| DateTime::from_timestamp(d as i64, 0).unwrap())",
 							function, default_args, self.enum_name, value_name
 						)
 						.as_str(),
@@ -685,7 +669,7 @@ impl<'a> StructBuilder<'a> {
 
 impl<'a> Struct<'a> {
 	fn create_struct(
-		&self, f: &mut Write, tera: &Tera, all_structs: &[&Struct<'static>],
+		&self, f: &mut dyn Write, tera: &Tera, all_structs: &[&Struct<'static>],
 	) -> Result<()> {
 		let mut context = tera::Context::new();
 		context.insert("s", &self);
@@ -761,7 +745,7 @@ impl<'a> serde::Serialize for Struct<'a> {
 }
 
 // Build parts of lib.rs as most of the structs are very repetitive
-quick_main!(|| -> Result<()> {
+fn main() -> Result<()> {
 	let out_dir = env::var("OUT_DIR")?;
 	for f in
 		&["build.rs", "channel.rs", "connection.rs", "server.rs", "struct.rs.tera", "macros.tera"]
@@ -769,8 +753,8 @@ quick_main!(|| -> Result<()> {
 		println!("cargo:rerun-if-changed=build/{}", f);
 	}
 
-	let mut tera = compile_templates!("build/*.tera");
-	tera.register_filter("indent", |value, args| {
+	let mut tera = Tera::new("build/*.tera")?;
+	tera.register_filter("indent", |value: &tera::Value, args: &HashMap<String, tera::Value>| {
 		if let Some(&tera::Value::Number(ref n)) = args.get("depth") {
 			if let tera::Value::String(s) = value {
 				if let Some(n) = n.as_u64() {
@@ -785,14 +769,14 @@ quick_main!(|| -> Result<()> {
 			Err("Expected argument 'depth' for indent".into())
 		}
 	});
-	tera.register_filter("title", |value, _| {
-		if let tera::Value::String(s) = value {
+	tera.register_filter("title", |value: &tera::Value, _: &_| {
+		if let tera::Value::String(ref s) = value {
 			Ok(tera::Value::String(to_pascal_case(s)))
 		} else {
 			Err("title expects a string to filter".into())
 		}
 	});
-	tera.register_filter("simplify", |value, _| {
+	tera.register_filter("simplify", |value: &tera::Value, _: &_| {
 		if let tera::Value::String(s) = value {
 			Ok(tera::Value::String(s.replace(&['<', '>', ',', ' '] as &[char], "")))
 		} else {
@@ -822,7 +806,7 @@ quick_main!(|| -> Result<()> {
 	}
 
 	Ok(())
-});
+}
 
 fn to_pascal_case<S: AsRef<str>>(text: S) -> String {
 	let sref = text.as_ref();

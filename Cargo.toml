@@ -11,6 +11,7 @@ readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
+edition = "2015"
 build = "build/build.rs"
 
 [lib]
@@ -27,6 +28,6 @@ lazy_static = "1"
 ts3plugin-sys = "0.5"
 
 [build-dependencies]
-error-chain = "0.10"
+anyhow = "1"
 serde = "1"
-tera = "0.11"
+tera = "1"

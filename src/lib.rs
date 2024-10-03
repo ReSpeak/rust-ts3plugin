@@ -64,8 +64,6 @@
 
 // TODO This should be removed at some time, when more code is ready
 #![allow(dead_code)]
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 extern crate chrono;
 #[macro_use]
@@ -519,14 +517,12 @@ impl<'a> Server<'a> {
 		})
 	}
 
-	pub fn get_server_group(&self, server_group_id: ServerGroupId) -> Option<ServerGroup> {
-		// TODO
-		None
+	pub fn get_server_group(&self, _server_group_id: ServerGroupId) -> Option<ServerGroup> {
+		todo!()
 	}
 
-	pub fn get_channel_group(&self, channel_group_id: ChannelGroupId) -> Option<ChannelGroup> {
-		// TODO
-		None
+	pub fn get_channel_group(&self, _channel_group_id: ChannelGroupId) -> Option<ChannelGroup> {
+		todo!()
 	}
 
 	/// Send a message to the server chat.
@@ -973,7 +969,7 @@ impl<'a> Connection<'a> {
 }
 
 pub struct TsApiLock {
-	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+	guard: MutexGuard<'static, (Option<(TsApi, Box<dyn Plugin>)>, Option<String>)>,
 }
 impl Deref for TsApiLock {
 	type Target = TsApi;
@@ -984,10 +980,10 @@ impl DerefMut for TsApiLock {
 }
 
 pub struct PluginLock {
-	guard: MutexGuard<'static, (Option<(TsApi, Box<Plugin>)>, Option<String>)>,
+	guard: MutexGuard<'static, (Option<(TsApi, Box<dyn Plugin>)>, Option<String>)>,
 }
 impl Deref for PluginLock {
-	type Target = Plugin;
+	type Target = dyn Plugin;
 	fn deref(&self) -> &Self::Target { &*self.guard.0.as_ref().unwrap().1 }
 }
 impl DerefMut for PluginLock {
@@ -1224,10 +1220,7 @@ impl TsApi {
 		self.servers.get(&server_id).map(|s| Server::new(&self, s))
 	}
 
-	pub fn get_permission(&self, permission_id: PermissionId) -> Option<&Permission> {
-		// TODO
-		None
-	}
+	pub fn get_permission(&self, _permission_id: PermissionId) -> Option<&Permission> { todo!() }
 
 	/// Print a message to the currently selected tab. This is only
 	/// visible in the window of this client and will not be sent to the server.

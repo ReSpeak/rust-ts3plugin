@@ -11,7 +11,7 @@ use plugin::Plugin;
 
 lazy_static! {
 	/// The api, plugin and plugin id
-	pub(crate) static ref DATA: Mutex<(Option<(::TsApi, Box<Plugin>)>, Option<String>)> =
+	pub(crate) static ref DATA: Mutex<(Option<(::TsApi, Box<dyn Plugin>)>, Option<String>)> =
 		Mutex::new((None, None));
 }
 
@@ -777,7 +777,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(
 }
 
 // Ignore clippy warnings, we can't change the TeamSpeak interface
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -855,7 +855,7 @@ pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(
 	}
 }
 
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -906,7 +906,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(
 	}
 }
 
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case, unused_variables)]
 #[no_mangle]
 #[doc(hidden)]
@@ -945,7 +945,7 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(
 	api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
 }
 
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case, unused_variables)]
 #[no_mangle]
 #[doc(hidden)]
@@ -1064,7 +1064,7 @@ pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(
 	);
 }
 
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
@@ -1099,7 +1099,7 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(
 	);
 }
 
-#[cfg_attr(feature = "clippy", allow(too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
