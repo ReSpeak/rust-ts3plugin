@@ -1,0 +1,188 @@
+{% import "macros.tera" as macros %}
+{% if s.do_struct %}
+{% if s.documentation %}
+/// {{ s.documentation }}
+{% endif %}
+#[derive(Debug, Clone)]
+{% if s.public %}
+pub {% endif %}struct {{ s.name }} {
+{% for prop in s.properties %}
+	{{ prop.name }}: {% if prop.result %}
+Result<{{ prop.type_s }}, ::Error>{% else %}
+{{ prop.type_s }}{% endif %},
+{% endfor %}
+
+{{ s.extra_attributes | indent(depth=1) }}}
+
+{% endif %}
+{% if s.do_impl or s.do_api_impl or s.do_update or s.do_constructor or s.extra_implementation %}
+	{% set impl = true %}
+impl {{ s.name }} {
+{% endif %}
+{% if s.do_impl %}
+{% for prop in s.properties %}
+	{% if prop.public %}
+{{ macros::do_doc(prop=prop,depth=1) }}{% endif %}
+	#[inline]
+	{% if prop.public %}
+	pub {% else %}	{% endif %}
+fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
+		{{ prop.getter_body }}
+	}
+{% endfor %}
+
+{% endif %}
+{% if s.do_update %}
+	{% for prop in s.properties %}
+	{% if prop.update_body %}
+	fn update_{{ prop.name }}(&mut self) {
+		self.{{ prop.name }} = {{ prop.update_body }}
+	}
+	{% endif %}
+	{% endfor %}
+
+	fn update(&mut self) {
+		{% for prop in s.properties %}
+		{% if prop.update_body %}
+		self.update_{{ prop.name }}();
+		{% endif %}
+		{% endfor %}
+	}
+
+	fn update_from(&mut self, other: &Self) {
+		{% for prop in s.properties %}
+		{% if prop.result %}
+		if self.{{ prop.name }}.is_err() {
+			self.{{ prop.name }} = other.{{ prop.name }}.clone();
+		}
+		{% endif %}
+		{% endfor %}
+	}
+
+{% endif %}
+{% if s.do_constructor %}
+	fn new({{ s.constructor_args }}) -> {{ s.name }} {
+{{ s.extra_initialisation | indent(depth=2) }}
+		{{ s.name }} {
+		{% for prop in s.properties %}
+			{{ prop.name }}: {{ prop.constructor_body }},
+		{% endfor %}
+
+{{ s.extra_creation | indent(depth=3) }}
+		}
+	}
+
+{% endif %}
+{% if s.do_impl %}
+{% if impl %}
+{{ s.extra_implementation | indent(depth=1) }}}
+
+{% endif %}
+{% if s.do_api_impl %}
+impl<'a> {{ s.api_name }}<'a> {
+{% for prop in s.properties %}
+	{% if prop.api_getter %}
+{{ macros::do_doc(prop=prop,depth=1) }}	#[inline]
+	pub fn get_{{ prop.name }}(&self) -> {{ prop.return_type }} {
+		match self.data {
+			Ok(data) => data.get_{{ prop.name }}(),
+			Err(_)   => Err(Error::Ok),
+		}
+	}
+	{% endif %}
+{% endfor %}
+{% if s.do_properties %}
+
+	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property> {
+		let mut v = vec![
+			{% for prop in s.properties %}
+			{% if prop.result and prop.api_getter %}
+			{{ s.api_name }}Property::{{ prop.type_s | simplify | title }} {
+				property: {{ s.api_name }}{{ prop.type_s | simplify | title }}Property::{{ prop.name | simplify  | title }},
+				data: self.get_{{ prop.name }}(),
+			},
+			{% endif %}
+			{% endfor %}
+{{ s.extra_properties | indent(depth=3) }}
+		];
+		v.retain(|p| if let Some(Error::Ok) = p.error() {
+			false
+		} else {
+			true
+		});
+		v
+	}
+{% endif %}
+}
+
+{% endif %}
+{% if s.do_properties %}
+{% for t in property_types %}
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum {{ s.api_name }}{{ t.0 | simplify | title }}Property {
+	{% for prop in properties %}
+		{% if prop.result and prop.api_getter and prop.type_s == t.0 %}
+{{ macros::do_doc(prop=prop,depth=1) }}{{ prop.name | title }},
+		{% endif %}
+	{% endfor %}
+	{% for ps in s.extra_property_list %}
+		{% if ps.0 == t.1 %}
+{{ ps.2 | indent(depth=1) }}
+		{% endif %}
+	{% endfor %}
+}
+{% endfor %}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum {{ s.api_name }}Property<'a> {
+{% for t in property_types %}
+	{{ t.0 | simplify | title }} {
+		property: {{ s.api_name }}{{ t.0 | simplify | title }}Property,
+		data: Result<{{ t.1 }}, Error>,
+	},
+{% endfor %}
+{{ s.extra_property_type | indent(depth=1) }}
+}
+
+impl<'a> {{ s.api_name }}Property<'a> {
+	pub fn error(&self) -> Option<Error> {
+		match *self {
+			{% for t in property_types %}
+			{{ s.api_name }}Property::{{ t.0 | simplify | title }} { ref data, .. } =>
+				data.as_ref().err().cloned(),
+			{% endfor %}
+		}
+	}
+	pub fn property_eq(&self, other: &{{ s.api_name }}Property) -> bool {
+		match *self {
+			{% for t in property_types %}
+			{{ s.api_name }}Property::{{ t.0 | simplify | title }} { ref property, .. } =>
+				if let {{ s.api_name }}Property::{{ t.0 | simplify | title }} { property: ref p2, .. } = *other {
+					return property == p2;
+				},
+			{% endfor %}
+		}
+		false
+	}
+}
+
+pub type {{ s.api_name }}Changes<'a> = Vec<(Option<{{ s.api_name }}Property<'a>>, {{ s.api_name}}Property<'a>)>;
+
+fn get_{{ s.api_name | lower }}_changes<'a>(mut old: Vec<{{ s.api_name }}Property<'a>>,
+	new: Vec<{{ s.api_name }}Property<'a>>)
+	-> {{ s.api_name }}Changes<'a> {
+	new.into_iter().filter_map(|p| {
+		if let Some(i_old) = old.iter()
+			.position(|p_old| p.property_eq(p_old)) {
+			let p_old = old.remove(i_old);
+			if p_old == p {
+				None
+			} else {
+				Some((Some(p_old.clone()), p))
+			}
+		} else {
+			Some((None, p))
+		}
+	}).collect()
+}
+{% endif %}

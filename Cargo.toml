@@ -6,31 +6,28 @@ description = """
 An abstraction layer that simplifies creating TeamSpeak3 plugins
 and stores received data to provide a more convenient API.
 """
-repository = "https://github.com/Flakebi/rust-ts3plugin"
-documentation = "https://docs.rs/ts3plugin"
+repository = "https://github.com/ReSpeak/rust-ts3plugin"
 readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
-build = "src/build.rs"
-
-[badges]
-travis-ci = { repository = "Flakebi/rust-ts3plugin" }
+edition = "2015"
+build = "build/build.rs"
 
 [lib]
 name = "ts3plugin"
+# Needed for cargo-readme
+path = "src/lib.rs"
 
 [features]
 default = []
 
 [dependencies]
-chrono = "0.2"
-ts3plugin-sys = "0.3"
-lazy_static = "0.2"
+chrono = "0.4"
+lazy_static = "1"
+ts3plugin-sys = "0.5"
 
-# For tests
 [build-dependencies]
-skeptic = "0.6"
-
-[dev-dependencies]
-skeptic = "0.6"
+anyhow = "1"
+serde = "1"
+tera = "1"
