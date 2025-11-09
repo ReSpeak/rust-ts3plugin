@@ -129,7 +129,7 @@ impl<'a> Property<'a> {
 
 	fn create_initialisation(&self) -> String {
 		if self.result {
-			String::from("Err(Error::Ok)") // <-- FIXED: was Err(::Error::Ok)
+			String::from("Err(Error::Ok)")
 		} else {
 			self.intern_create_initialisation(self.default_args.as_ref(), false)
 		}
