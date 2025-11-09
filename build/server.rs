@@ -1,4 +1,4 @@
-use *;
+use crate::{Map, PropertyBuilder, Struct, StructBuilder};
 
 pub(crate) fn create() -> Vec<Struct<'static>> {
 	// Map types to functions that will get that type
