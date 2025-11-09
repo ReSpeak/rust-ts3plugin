@@ -75,7 +75,7 @@ pub use ts3plugin_sys::public_definitions::*;
 pub use ts3plugin_sys::public_errors::Error;
 pub use ts3plugin_sys::ts3functions::Ts3Functions;
 
-pub use plugin::*;
+pub use crate::plugin::*;
 
 use chrono::*;
 use std::collections::HashMap as Map;
@@ -425,7 +425,7 @@ impl<'a> Server<'a> {
 			self.api.log_or_print(
 				format!("Can't find connection {:?}", connection_id),
 				"rust-ts3plugin",
-				::LogLevel::Warning,
+				crate::LogLevel::Warning,
 			);
 			Connection::new_err(&self.api, self.get_id(), connection_id)
 		})
@@ -438,7 +438,7 @@ impl<'a> Server<'a> {
 			self.api.log_or_print(
 				format!("Can't find channel {:?}", channel_id),
 				"rust-ts3plugin",
-				::LogLevel::Warning,
+				crate::LogLevel::Warning,
 			);
 			Channel::new_owned(&self.api, self.get_id(), channel_id)
 		})
