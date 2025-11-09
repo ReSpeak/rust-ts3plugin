@@ -30,4 +30,4 @@ ts3plugin-sys = "0.5"
 [build-dependencies]
 anyhow = "1"
 serde = "1"
-tera = "1"
+tera = "1.20.1"

@@ -94,7 +94,7 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
-pub extern "C" fn ts3plugin_configure(handle: *mut std::os::raw::c_void, qParentWidget: *mut std::os::raw::c_void) {
+pub extern "C" fn ts3plugin_configure(_handle: *mut std::os::raw::c_void, _qParentWidget: *mut std::os::raw::c_void) {
 	// !TODO
 	// The handle parameter and qParentWidget parameter is not really needed to show a settings window using egui or whatever framework is chosen.
 	// Maybe expose the pointers anyway later if needed.

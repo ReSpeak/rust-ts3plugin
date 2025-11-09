@@ -208,7 +208,7 @@ impl<'a> Deref for Invoker<'a> {
 impl<'a> Invoker<'a> {
 	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> { Invoker { server, data } }
 
-	pub fn get_connection(&self) -> Option<Connection> { self.server.get_connection(self.id) }
+	pub fn get_connection(&'_ self) -> Option<Connection<'_>> { self.server.get_connection(self.id) }
 }
 
 // ********** Server **********
@@ -1216,7 +1216,7 @@ impl TsApi {
 
 	/// Get the server that has the specified id, returns `None` if there is no
 	/// such server.
-	pub fn get_server(&self, server_id: ServerId) -> Option<Server> {
+	pub fn get_server(&'_ self, server_id: ServerId) -> Option<Server<'_>> {
 		self.servers.get(&server_id).map(|s| Server::new(&self, s))
 	}
 

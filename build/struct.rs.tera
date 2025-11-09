@@ -8,7 +8,7 @@
 pub {% endif %}struct {{ s.name }} {
 {% for prop in s.properties %}
 	{{ prop.name }}: {% if prop.result %}
-Result<{{ prop.type_s }}, ::Error>{% else %}
+Result<{{ prop.type_s }}, Error>{% else %}
 {{ prop.type_s }}{% endif %},
 {% endfor %}
 

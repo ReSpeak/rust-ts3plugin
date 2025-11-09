@@ -81,8 +81,7 @@ impl<'a> Property<'a> {
 			result_type.push_str(self.type_s.as_ref());
 		}
 		if self.result {
-			result_type.push_str(", ");
-			result_type.push_str("::Error>");
+			result_type.push_str(", Error>");
 		}
 		result_type
 	}
@@ -130,7 +129,7 @@ impl<'a> Property<'a> {
 
 	fn create_initialisation(&self) -> String {
 		if self.result {
-			String::from("Err(::Error::Ok)")
+			String::from("Err(Error::Ok)") // <-- FIXED: was Err(::Error::Ok)
 		} else {
 			self.intern_create_initialisation(self.default_args.as_ref(), false)
 		}
