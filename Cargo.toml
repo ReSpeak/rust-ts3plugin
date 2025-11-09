@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
-edition = "2018"
+edition = "2021"
 build = "build/build.rs"
 
 [lib]
