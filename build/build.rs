@@ -769,7 +769,7 @@ fn main() -> Result<()> {
 		}
 	});
 	tera.register_filter("title", |value: &tera::Value, _: &_| {
-		if let tera::Value::String(ref s) = value {
+		if let tera::Value::String(s) = value {
 			Ok(tera::Value::String(to_pascal_case(s)))
 		} else {
 			Err("title expects a string to filter".into())

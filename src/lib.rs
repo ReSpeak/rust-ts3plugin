@@ -84,20 +84,18 @@ use std::fmt;
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int};
-use std::sync::MutexGuard;
+use std::sync::{Mutex, MutexGuard};
 
 /// Converts a normal `String` to a `CString`.
 macro_rules! to_cstring {
-	($string: expr) => {
+	($string: expr_2021) => {
 		CString::new($string).unwrap_or(CString::new("String contains null character").unwrap())
 	};
 }
 
 /// Converts a `CString` to a normal `String`.
 macro_rules! to_string {
-	($string: expr) => {{
-		String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned()
-	}};
+	($string: expr_2021) => {{ String::from_utf8_lossy(CStr::from_ptr($string).to_bytes()).into_owned() }};
 }
 
 // Declare modules here so the macros are visible in the modules
@@ -114,7 +112,7 @@ include!(concat!(env!("OUT_DIR"), "/server.rs"));
 /// This is not part of the official api and is only public to permit dirty
 /// hacks!
 #[doc(hidden)]
-pub static mut TS3_FUNCTIONS: Option<Ts3Functions> = None;
+pub static TS3_FUNCTIONS: Mutex<Option<Ts3Functions>> = Mutex::new(None);
 
 // ******************** Structs ********************
 /// The possible receivers of a message. A message can be sent to a specific
@@ -171,7 +169,9 @@ pub struct InvokerData {
 }
 
 impl PartialEq<InvokerData> for InvokerData {
-	fn eq(&self, other: &InvokerData) -> bool { self.id == other.id }
+	fn eq(&self, other: &InvokerData) -> bool {
+		self.id == other.id
+	}
 }
 
 impl InvokerData {
@@ -180,13 +180,19 @@ impl InvokerData {
 	}
 
 	/// Get the connection id of this invoker.
-	pub fn get_id(&self) -> ConnectionId { self.id }
+	pub fn get_id(&self) -> ConnectionId {
+		self.id
+	}
 
 	/// Get the unique id of this invoker.
-	pub fn get_uid(&self) -> &String { &self.uid }
+	pub fn get_uid(&self) -> &String {
+		&self.uid
+	}
 
 	/// Get the name of this invoker.
-	pub fn get_name(&self) -> &String { &self.name }
+	pub fn get_name(&self) -> &String {
+		&self.name
+	}
 }
 
 /// The invoker is maybe not visible to the user, but we can get events caused
@@ -198,17 +204,25 @@ pub struct Invoker<'a> {
 }
 
 impl<'a, 'b> PartialEq<Invoker<'b>> for Invoker<'a> {
-	fn eq(&self, other: &Invoker) -> bool { self.server == other.server && self.data == other.data }
+	fn eq(&self, other: &Invoker) -> bool {
+		self.server == other.server && self.data == other.data
+	}
 }
 impl<'a> Deref for Invoker<'a> {
 	type Target = InvokerData;
-	fn deref(&self) -> &Self::Target { &self.data }
+	fn deref(&self) -> &Self::Target {
+		&self.data
+	}
 }
 
 impl<'a> Invoker<'a> {
-	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> { Invoker { server, data } }
+	fn new(server: Server<'a>, data: InvokerData) -> Invoker<'a> {
+		Invoker { server, data }
+	}
 
-	pub fn get_connection(&'_ self) -> Option<Connection<'_>> { self.server.get_connection(self.id) }
+	pub fn get_connection(&'_ self) -> Option<Connection<'_>> {
+		self.server.get_connection(self.id)
+	}
 }
 
 // ********** Server **********
@@ -219,7 +233,9 @@ pub struct Server<'a> {
 }
 
 impl<'a, 'b> PartialEq<Server<'b>> for Server<'a> {
-	fn eq(&self, other: &Server<'b>) -> bool { self.get_id() == other.get_id() }
+	fn eq(&self, other: &Server<'b>) -> bool {
+		self.get_id() == other.get_id()
+	}
 }
 impl<'a> Eq for Server<'a> {}
 impl<'a> fmt::Debug for Server<'a> {
@@ -229,7 +245,9 @@ impl<'a> fmt::Debug for Server<'a> {
 }
 
 impl PartialEq<ServerData> for ServerData {
-	fn eq(&self, other: &ServerData) -> bool { self.id == other.id }
+	fn eq(&self, other: &ServerData) -> bool {
+		self.id == other.id
+	}
 }
 impl Eq for ServerData {}
 
@@ -242,6 +260,8 @@ impl ServerData {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error =
 				transmute((TS3_FUNCTIONS
+					.lock()
+					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
 					.get_server_variable_as_string)(id.0, property as usize, &mut name));
@@ -258,6 +278,8 @@ impl ServerData {
 			let mut number: c_int = 0;
 			let res: Error =
 				transmute((TS3_FUNCTIONS
+					.lock()
+					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
 					.get_server_variable_as_int)(id.0, property as usize, &mut number));
@@ -275,6 +297,8 @@ impl ServerData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_server_variable_as_uint64)(
@@ -293,6 +317,8 @@ impl ServerData {
 		unsafe {
 			let mut number: u16 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_client_id)(id.0, &mut number));
@@ -310,13 +336,14 @@ impl ServerData {
 		let mut map = Map::new();
 		// Query connected connections
 		let mut result: *mut u16 = std::ptr::null_mut();
-		let res: Error =
-			unsafe {
-				transmute((TS3_FUNCTIONS
-					.as_ref()
-					.expect("Functions should be loaded")
-					.get_client_list)(id.0, &mut result))
-			};
+		let res: Error = unsafe {
+			transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_client_list)(id.0, &mut result))
+		};
 		if res == Error::Ok {
 			unsafe {
 				let mut counter = 0;
@@ -341,6 +368,8 @@ impl ServerData {
 		let mut result: *mut u64 = std::ptr::null_mut();
 		let res: Error = unsafe {
 			transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_channel_list)(id.0, &mut result))
@@ -405,7 +434,9 @@ impl ServerData {
 }
 
 impl<'a> Server<'a> {
-	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> { Server { api, data: Ok(data) } }
+	fn new(api: &'a TsApi, data: &'a ServerData) -> Server<'a> {
+		Server { api, data: Ok(data) }
+	}
 
 	fn new_err(api: &'a TsApi, server_id: ServerId) -> Server<'a> {
 		Server { api, data: Err(server_id) }
@@ -530,6 +561,8 @@ impl<'a> Server<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.request_send_server_text_msg)(
@@ -549,30 +582,31 @@ impl<'a> Server<'a> {
 	///
 	/// [`Plugin::plugin_message`]: plugin/trait.Plugin.html#method.plugin_message
 	pub fn send_plugin_message<S: AsRef<str>>(&self, message: S) {
-		unsafe {
-			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").send_plugin_command)(
-				self.get_id().0,
-				to_cstring!(self.api.get_plugin_id()).as_ptr(),
-				text.as_ptr(),
-				PluginTargetMode::Server as i32,
-				std::ptr::null(),
-				std::ptr::null(),
-			);
-		}
+		let text = to_cstring!(message.as_ref());
+		(TS3_FUNCTIONS
+			.lock()
+			.unwrap()
+			.as_ref()
+			.expect("Functions should be loaded")
+			.send_plugin_command)(
+			self.get_id().0,
+			to_cstring!(self.api.get_plugin_path()).as_ptr(),
+			text.as_ptr(),
+			PluginTargetMode::Server as i32,
+			std::ptr::null(),
+			std::ptr::null(),
+		);
 	}
 
 	/// Print a message into the server or channel tab of this server. This is only
 	/// visible in the window of this client and will not be sent to the server.
 	pub fn print_message<S: AsRef<str>>(&self, message: S, target: MessageTarget) {
-		unsafe {
-			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").print_message)(
-				self.get_id().0,
-				text.as_ptr(),
-				target,
-			);
-		}
+		let text = to_cstring!(message.as_ref());
+		(TS3_FUNCTIONS.lock().unwrap().as_ref().expect("Functions should be loaded").print_message)(
+			self.get_id().0,
+			text.as_ptr(),
+			target,
+		);
 	}
 }
 
@@ -610,6 +644,8 @@ impl ChannelData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_channel_variable_as_string)(
@@ -629,6 +665,8 @@ impl ChannelData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_channel_variable_as_int)(
@@ -648,6 +686,8 @@ impl ChannelData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_channel_variable_as_uint64)(
@@ -666,6 +706,8 @@ impl ChannelData {
 			let mut number: u64 = 0;
 			let res: Error =
 				transmute((TS3_FUNCTIONS
+					.lock()
+					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
 					.get_parent_channel_of_channel)(server_id.0, id.0, &mut number));
@@ -678,7 +720,9 @@ impl ChannelData {
 }
 
 impl<'a> Channel<'a> {
-	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> { Channel { api, data: Ok(data) } }
+	fn new(api: &'a TsApi, data: &'a ChannelData) -> Channel<'a> {
+		Channel { api, data: Ok(data) }
+	}
 
 	fn new_owned(api: &'a TsApi, server_id: ServerId, channel_id: ChannelId) -> Channel<'a> {
 		Channel { api, data: Err((server_id, channel_id)) }
@@ -699,7 +743,9 @@ impl<'a> Channel<'a> {
 	}
 
 	/// Get the server of this channel.
-	pub fn get_server(&self) -> Server<'a> { self.api.get_server_unwrap(self.get_server_id()) }
+	pub fn get_server(&self) -> Server<'a> {
+		self.api.get_server_unwrap(self.get_server_id())
+	}
 
 	pub fn get_parent_channel(&self) -> Result<Option<Channel<'a>>, Error> {
 		match self.data {
@@ -719,6 +765,8 @@ impl<'a> Channel<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.request_send_channel_text_msg)(
@@ -769,6 +817,8 @@ impl ConnectionData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_connection_variable_as_string)(
@@ -788,6 +838,8 @@ impl ConnectionData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_connection_variable_as_uint64)(
@@ -807,6 +859,8 @@ impl ConnectionData {
 		unsafe {
 			let mut number: f64 = 0.0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_connection_variable_as_double)(
@@ -826,6 +880,8 @@ impl ConnectionData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_client_variable_as_string)(
@@ -845,6 +901,8 @@ impl ConnectionData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_client_variable_as_int)(
@@ -862,6 +920,8 @@ impl ConnectionData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_channel_of_client)(server_id.0, id.0, &mut number));
@@ -878,6 +938,8 @@ impl ConnectionData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.is_whispering)(server_id.0, id.0, &mut number));
@@ -913,7 +975,9 @@ impl<'a> Connection<'a> {
 	}
 
 	/// Get the server of this connection.
-	pub fn get_server(&self) -> Server<'a> { self.api.get_server_unwrap(self.get_server_id()) }
+	pub fn get_server(&self) -> Server<'a> {
+		self.api.get_server_unwrap(self.get_server_id())
+	}
 
 	/// Get the channel of this connection.
 	pub fn get_channel(&self) -> Result<Channel<'a>, Error> {
@@ -952,6 +1016,8 @@ impl<'a> Connection<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.request_send_private_text_msg)(
@@ -973,10 +1039,14 @@ pub struct TsApiLock {
 }
 impl Deref for TsApiLock {
 	type Target = TsApi;
-	fn deref(&self) -> &Self::Target { &self.guard.0.as_ref().unwrap().0 }
+	fn deref(&self) -> &Self::Target {
+		&self.guard.0.as_ref().unwrap().0
+	}
 }
 impl DerefMut for TsApiLock {
-	fn deref_mut(&mut self) -> &mut Self::Target { &mut self.guard.0.as_mut().unwrap().0 }
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.guard.0.as_mut().unwrap().0
+	}
 }
 
 pub struct PluginLock {
@@ -984,10 +1054,14 @@ pub struct PluginLock {
 }
 impl Deref for PluginLock {
 	type Target = dyn Plugin;
-	fn deref(&self) -> &Self::Target { &*self.guard.0.as_ref().unwrap().1 }
+	fn deref(&self) -> &Self::Target {
+		&*self.guard.0.as_ref().unwrap().1
+	}
 }
 impl DerefMut for PluginLock {
-	fn deref_mut(&mut self) -> &mut Self::Target { &mut *self.guard.0.as_mut().unwrap().1 }
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut *self.guard.0.as_mut().unwrap().1
+	}
 }
 
 // ********** TsApi **********
@@ -1003,7 +1077,9 @@ pub struct TsApi {
 // to be publicly constructable.
 impl TsApi {
 	/// Create a new TsApi instance without loading anything.
-	fn new(plugin_id: String) -> TsApi { TsApi { servers: Map::new(), plugin_id: plugin_id } }
+	fn new(plugin_id: String) -> TsApi {
+		TsApi { servers: Map::new(), plugin_id: plugin_id }
+	}
 
 	/// Load all currently connected server and their data.
 	/// This should normally be executed after `new()`.
@@ -1012,6 +1088,8 @@ impl TsApi {
 		let mut result: *mut u64 = std::ptr::null_mut();
 		let res: Error = unsafe {
 			transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_server_connection_handler_list)(&mut result))
@@ -1024,6 +1102,8 @@ impl TsApi {
 					// We get open tabs, even if they are disconnected.
 					let mut status: c_int = 0;
 					let res: Error = transmute((TS3_FUNCTIONS
+						.lock()
+						.unwrap()
 						.as_ref()
 						.expect("Functions should be loaded")
 						.get_connection_status)(
@@ -1061,6 +1141,8 @@ impl TsApi {
 	) -> Result<(), Error> {
 		unsafe {
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.log_message)(
@@ -1097,6 +1179,8 @@ impl TsApi {
 		unsafe {
 			let mut message: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
+				.lock()
+				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
 				.get_error_message)(error as u32, &mut message));
@@ -1189,10 +1273,7 @@ impl TsApi {
 	/// These functions can be used to invoke actions that are not yet
 	/// implemented by this library. You should file a bug report or make a pull
 	/// request if you need to use this function.
-	pub unsafe fn get_raw_api() -> &'static Ts3Functions { TS3_FUNCTIONS.as_ref().unwrap() }
-
-	/// Get the plugin id assigned by TeamSpeak.
-	pub fn get_plugin_id(&self) -> &str { &self.plugin_id }
+	//pub unsafe fn get_raw_api() -> &'static Ts3Functions { unsafe { TS3_FUNCTIONS.lock().unwrap().as_ref().unwrap() }}
 
 	/// Get all servers to which this client is currently connected.
 	pub fn get_servers<'a>(&'a self) -> Vec<Server<'a>> {
@@ -1220,60 +1301,68 @@ impl TsApi {
 		self.servers.get(&server_id).map(|s| Server::new(&self, s))
 	}
 
-	pub fn get_permission(&self, _permission_id: PermissionId) -> Option<&Permission> { todo!() }
+	pub fn get_permission(&self, _permission_id: PermissionId) -> Option<&Permission> {
+		todo!()
+	}
 
 	/// Print a message to the currently selected tab. This is only
 	/// visible in the window of this client and will not be sent to the server.
 	pub fn print_message<S: AsRef<str>>(&self, message: S) {
-		unsafe {
-			let text = to_cstring!(message.as_ref());
-			(TS3_FUNCTIONS
-				.as_ref()
-				.expect("Functions should be loaded")
-				.print_message_to_current_tab)(text.as_ptr());
-		}
+		let text = to_cstring!(message.as_ref());
+		(TS3_FUNCTIONS
+			.lock()
+			.unwrap()
+			.as_ref()
+			.expect("Functions should be loaded")
+			.print_message_to_current_tab)(text.as_ptr());
 	}
 
 	/// Get the application path of the TeamSpeak executable.
 	pub fn get_app_path(&self) -> String {
-		unsafe {
-			TsApi::get_path(|p, l| {
-				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_app_path)(p, l)
-			})
-		}
+		TsApi::get_path(|p, l| {
+			(TS3_FUNCTIONS
+				.lock()
+				.unwrap()
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_app_path)(p, l)
+		})
 	}
 
 	/// Get the resource path of TeamSpeak.
 	pub fn get_resources_path(&self) -> String {
-		unsafe {
-			TsApi::get_path(|p, l| {
-				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_resources_path)(
-					p, l,
-				)
-			})
-		}
+		TsApi::get_path(|p, l| {
+			(TS3_FUNCTIONS
+				.lock()
+				.unwrap()
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_resources_path)(p, l)
+		})
 	}
 
 	/// Get the path, where configuration files are stored.
 	/// This is e.g. `~/.ts3client` on linux or `%AppData%/TS3Client` on Windows.
 	pub fn get_config_path(&self) -> String {
-		unsafe {
-			TsApi::get_path(|p, l| {
-				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_config_path)(p, l)
-			})
-		}
+		TsApi::get_path(|p, l| {
+			(TS3_FUNCTIONS
+				.lock()
+				.unwrap()
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_config_path)(p, l)
+		})
 	}
 
 	/// Get the path where TeamSpeak plugins are stored.
 	pub fn get_plugin_path(&self) -> String {
-		unsafe {
-			TsApi::get_path(|p, l| {
-				(TS3_FUNCTIONS.as_ref().expect("Functions should be loaded").get_plugin_path)(
-					p,
-					l,
-					to_cstring!(self.plugin_id.as_str()).as_ptr(),
-				)
-			})
-		}
+		TsApi::get_path(|p, l| {
+			(TS3_FUNCTIONS
+				.lock()
+				.unwrap()
+				.as_ref()
+				.expect("Functions should be loaded")
+				.get_plugin_path)(p, l, to_cstring!(self.plugin_id.as_str()).as_ptr())
+		})
 	}
 }

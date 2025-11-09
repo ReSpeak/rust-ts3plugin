@@ -25,7 +25,7 @@ macro_rules! filename {
 
 /// Log an error with a description and the current line and file
 macro_rules! error {
-	($api: ident, $description: expr, $error: expr) => {
+	($api: ident, $description: expr_2021, $error: expr_2021) => {
 		$api.log_or_print(
 			format!("Error {:?} ({}) in in {}:L{}", $error, $description, filename!(), line!()),
 			"rust-ts3plugin",
@@ -64,19 +64,20 @@ pub unsafe fn private_init<T: Plugin>() -> Result<(), crate::InitError> {
 // ************************** Interface for TeamSpeak **************************
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub extern "C" fn ts3plugin_apiVersion() -> c_int { 26 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
-	crate::TS3_FUNCTIONS = Some(funs);
+	let local = &crate::TS3_FUNCTIONS;
+	local.lock().unwrap().replace(funs);
 }
 
 /// Called when the plugin should be unloaded.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_shutdown() {
 	let mut data = DATA.lock().unwrap();
@@ -92,7 +93,7 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 /// Called when settings is opened and QtThread or NewThread is set as configurable offer.
 /// https://github.com/teamspeak/ts3client-pluginsdk/blob/4aa90a53aa150cbf81e13bc97e68c0431b26499f/src/plugin.h#L32
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub extern "C" fn ts3plugin_configure(_handle: *mut std::os::raw::c_void, _qParentWidget: *mut std::os::raw::c_void) {
 	// !TODO
@@ -106,19 +107,19 @@ pub extern "C" fn ts3plugin_configure(_handle: *mut std::os::raw::c_void, _qPare
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_registerPluginID(plugin_id: *const c_char) {
+pub unsafe extern "C" fn ts3plugin_registerPluginID(plugin_id: *const c_char) { unsafe {
 	let mut data = DATA.lock().unwrap();
 	data.1 = Some(to_string!(plugin_id));
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(
 	server_id: u64, status: c_int, error: c_uint,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let status = transmute(status);
 	let error = transmute(error);
@@ -140,12 +141,12 @@ pub unsafe extern "C" fn ts3plugin_onConnectStatusChangeEvent(
 	if status == ConnectStatus::Disconnected {
 		api.remove_server(server_id);
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *const c_char) {
+pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *const c_char) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let message = to_string!(message);
 	let mut data = DATA.lock().unwrap();
@@ -154,15 +155,15 @@ pub unsafe extern "C" fn ts3plugin_onServerStopEvent(server_id: u64, message: *c
 	let plugin = &mut data.1;
 	let server = api.get_server_unwrap(server_id);
 	plugin.server_stop(api, &server, message);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(
 	server_id: u64, message: *const c_char, error: c_uint, return_code: *const c_char,
 	extra_message: *const c_char,
-) -> c_int {
+) -> c_int { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let message = to_string!(message);
 	let error = transmute(error);
@@ -175,14 +176,14 @@ pub unsafe extern "C" fn ts3plugin_onServerErrorEvent(
 	let server = api.get_server_unwrap(server_id);
 	let b = plugin.server_error(api, &server, error, message, return_code, extra_message);
 	if b { 1 } else { 0 }
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(
 	server_id: u64, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let invoker = if invoker_id == 0 {
 		None
@@ -205,10 +206,10 @@ pub unsafe extern "C" fn ts3plugin_onServerEditedEvent(
 	}
 	let server = api.get_server_unwrap(server_id);
 	plugin.server_edited(api, &server, invoker.map(|i| crate::Invoker::new(server.clone(), i)).as_ref());
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerConnectionInfoEvent(server_id: u64) {
 	let server_id = crate::ServerId(server_id);
@@ -221,7 +222,7 @@ pub unsafe extern "C" fn ts3plugin_onServerConnectionInfoEvent(server_id: u64) {
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onConnectionInfoEvent(server_id: u64, connection_id: u16) {
 	let server_id = crate::ServerId(server_id);
@@ -236,12 +237,12 @@ pub unsafe extern "C" fn ts3plugin_onConnectionInfoEvent(server_id: u64, connect
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(
 	server_id: u64, connection_id: u16, invoker_id: u16, invoker_name: *const c_char,
 	invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let invoker_id = crate::ConnectionId(invoker_id);
@@ -277,15 +278,15 @@ pub unsafe extern "C" fn ts3plugin_onUpdateClientEvent(
 		crate::get_connection_changes(old_connection.properties(), connection.properties()),
 		&crate::Invoker::new(server.clone(), invoker),
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, move_message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let old_channel_id = crate::ChannelId(old_channel_id);
@@ -362,16 +363,16 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveEvent(
 			api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
 		}
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
 	move_message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let old_channel_id = crate::ChannelId(old_channel_id);
@@ -455,14 +456,14 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveMovedEvent(
 			api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
 		}
 	}
-}
+}}
 
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64, visibility: c_int,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	//let old_channel_id = ::ChannelId(old_channel_id);
@@ -490,15 +491,15 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveSubscriptionEvent(
 		}
 		Visibility::Retain => {}
 	}
-}
+}}
 
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, timeout_message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	//let old_channel_id = ::ChannelId(old_channel_id);
@@ -515,10 +516,10 @@ pub unsafe extern "C" fn ts3plugin_onClientMoveTimeoutEvent(
 		plugin.connection_timeout(api, &server, &connection);
 	}
 	api.get_mut_server(server_id).unwrap().remove_connection(connection_id);
-}
+}}
 
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(
 	server_id: u64, channel_id: u64, parent_channel_id: u64,
@@ -540,7 +541,7 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelEvent(
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(
 	server_id: u64, channel_id: u64,
@@ -569,7 +570,7 @@ pub unsafe extern "C" fn ts3plugin_onChannelDescriptionUpdateEvent(
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64, channel_id: u64) {
 	let server_id = crate::ServerId(server_id);
@@ -602,12 +603,12 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEvent(server_id: u64, channel_
 }
 
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(
 	server_id: u64, channel_id: u64, parent_channel_id: u64, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let channel_id = crate::ChannelId(channel_id);
 	let parent_channel_id = crate::ChannelId(parent_channel_id);
@@ -644,15 +645,15 @@ pub unsafe extern "C" fn ts3plugin_onNewChannelCreatedEvent(
 		&channel,
 		invoker.map(|i| crate::Invoker::new(server.clone(), i)).as_ref(),
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(
 	server_id: u64, channel_id: u64, invoker_id: u16, invoker_name: *const c_char,
 	invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let channel_id = crate::ChannelId(channel_id);
 	let invoker = if invoker_id == 0 {
@@ -684,15 +685,15 @@ pub unsafe extern "C" fn ts3plugin_onDelChannelEvent(
 	if api.get_mut_server(server_id).and_then(|s| s.remove_channel(channel_id)).is_none() {
 		api.log_or_print("Can't remove channel", "rust-ts3plugin", crate::LogLevel::Error);
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(
 	server_id: u64, channel_id: u64, invoker_id: u16, invoker_name: *const c_char,
 	invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let channel_id = crate::ChannelId(channel_id);
 	let invoker_id = crate::ConnectionId(invoker_id);
@@ -731,10 +732,10 @@ pub unsafe extern "C" fn ts3plugin_onUpdateChannelEditedEvent(
 		&crate::Channel::new(api, &old_channel),
 		&crate::Invoker::new(server.clone(), invoker),
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onChannelPasswordChangedEvent(server_id: u64, channel_id: u64) {
 	let server_id = crate::ServerId(server_id);
@@ -749,12 +750,12 @@ pub unsafe extern "C" fn ts3plugin_onChannelPasswordChangedEvent(server_id: u64,
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(
 	server_id: u64, channel_id: u64, new_parent_channel_id: u64, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let channel_id = crate::ChannelId(channel_id);
 	let new_parent_channel_id = crate::ChannelId(new_parent_channel_id);
@@ -790,18 +791,18 @@ pub unsafe extern "C" fn ts3plugin_onChannelMoveEvent(
 	{
 		channel.parent_channel_id = Ok(new_parent_channel_id);
 	}
-}
+}}
 
 // Ignore clippy warnings, we can't change the TeamSpeak interface
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onTextMessageEvent(
 	server_id: u64, target_mode: u16, receiver_id: u16, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char, message: *const c_char,
 	ignored: c_int,
-) -> c_int {
+) -> c_int { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let target_mode = transmute(target_mode as i32);
 	let receiver_id = crate::ConnectionId(receiver_id);
@@ -842,15 +843,15 @@ pub unsafe extern "C" fn ts3plugin_onTextMessageEvent(
 	} else {
 		0
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(
 	server_id: u64, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
 	message: *const c_char, ignored: c_int,
-) -> c_int {
+) -> c_int { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let invoker_id = crate::ConnectionId(invoker_id);
 	let invoker_name = to_string!(invoker_name);
@@ -869,17 +870,17 @@ pub unsafe extern "C" fn ts3plugin_onClientPokeEvent(
 	} else {
 		0
 	}
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
 	message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let old_channel_id = crate::ChannelId(old_channel_id);
@@ -920,17 +921,17 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromChannelEvent(
 	{
 		connection.channel_id = Ok(new_channel_id);
 	}
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
 	message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let old_channel_id = crate::ChannelId(old_channel_id);
@@ -959,17 +960,17 @@ pub unsafe extern "C" fn ts3plugin_onClientKickFromServerEvent(
 	}
 	// Remove the kicked connection
 	api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case, unused_variables)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientBanFromServerEvent(
 	server_id: u64, connection_id: u16, old_channel_id: u64, new_channel_id: u64,
 	visibility: c_int, invoker_id: u16, invoker_name: *const c_char, invoker_uid: *const c_char,
 	time: u64, message: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	//let old_channel_id = ::ChannelId(old_channel_id);
@@ -999,14 +1000,14 @@ pub unsafe extern "C" fn ts3plugin_onClientBanFromServerEvent(
 	}
 	// Remove the banned connection
 	api.get_mut_server(server_id).map(|s| s.remove_connection(connection_id));
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(
 	server_id: u64, talking: c_int, whispering: c_int, connection_id: u16,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let talking = transmute(talking);
 	let whispering = whispering != 0;
@@ -1027,14 +1028,14 @@ pub unsafe extern "C" fn ts3plugin_onTalkStatusChangeEvent(
 		connection.talking = Ok(talking);
 		connection.whispering = Ok(whispering);
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onAvatarUpdated(
 	server_id: u64, connection_id: u16, avatar_path: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let path = if avatar_path.is_null() { None } else { Some(to_string!(avatar_path)) };
@@ -1045,14 +1046,14 @@ pub unsafe extern "C" fn ts3plugin_onAvatarUpdated(
 	let server = api.get_server_unwrap(server_id);
 	let connection = server.get_connection_unwrap(connection_id);
 	plugin.avatar_changed(api, &server, &connection, path);
-}
+}}
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(
 	server_id: u64, channel_group_id: u64, channel_id: u64, connection_id: u16, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let channel_group_id = crate::ChannelGroupId(channel_group_id);
 	let channel_id = crate::ChannelId(channel_id);
@@ -1078,17 +1079,17 @@ pub unsafe extern "C" fn ts3plugin_onClientChannelGroupChangedEvent(
 		&channel,
 		&crate::Invoker::new(server.clone(), invoker),
 	);
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(
 	server_id: u64, connection_id: u16, connection_name: *const c_char,
 	connection_uid: *const c_char, server_group_id: u64, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let connection_name = to_string!(connection_name);
@@ -1113,17 +1114,17 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientAddedEvent(
 		&server_group,
 		&crate::Invoker::new(server.clone(), invoker),
 	);
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerGroupClientDeletedEvent(
 	server_id: u64, connection_id: u16, connection_name: *const c_char,
 	connection_uid: *const c_char, server_group_id: u64, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let connection_name = to_string!(connection_name);
@@ -1148,15 +1149,15 @@ pub unsafe extern "C" fn ts3plugin_onServerGroupClientDeletedEvent(
 		&server_group,
 		&crate::Invoker::new(server.clone(), invoker),
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onServerPermissionErrorEvent(
 	server_id: u64, message: *const c_char, error: c_uint, return_code: *const c_char,
 	permission_id: c_uint,
-) -> c_int {
+) -> c_int { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let message = to_string!(message);
 	let error = transmute(error);
@@ -1173,14 +1174,14 @@ pub unsafe extern "C" fn ts3plugin_onServerPermissionErrorEvent(
 	} else {
 		0
 	}
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onEditPlaybackVoiceDataEvent(
 	server_id: u64, connection_id: u16, samples: *mut c_short, sample_count: c_int, channels: c_int,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
@@ -1191,15 +1192,15 @@ pub unsafe extern "C" fn ts3plugin_onEditPlaybackVoiceDataEvent(
 	let server = api.get_server_unwrap(server_id);
 	let connection = server.get_connection_unwrap(connection_id);
 	plugin.playback_voice_data(api, &server, &connection, samples, channels);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onEditPostProcessVoiceDataEvent(
 	server_id: u64, connection_id: u16, samples: *mut c_short, sample_count: c_int,
 	channels: c_int, channel_speaker_array: *const c_uint, channel_fill_mask: *mut c_uint,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let connection_id = crate::ConnectionId(connection_id);
 	let samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
@@ -1221,15 +1222,15 @@ pub unsafe extern "C" fn ts3plugin_onEditPostProcessVoiceDataEvent(
 		channel_speaker_array,
 		channel_fill_mask,
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onEditMixedPlaybackVoiceDataEvent(
 	server_id: u64, samples: *mut c_short, sample_count: c_int, channels: c_int,
 	channel_speaker_array: *const c_uint, channel_fill_mask: *mut c_uint,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
 	let channel_speaker_array =
@@ -1248,14 +1249,14 @@ pub unsafe extern "C" fn ts3plugin_onEditMixedPlaybackVoiceDataEvent(
 		channel_speaker_array,
 		channel_fill_mask,
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onEditCapturedVoiceDataEvent(
 	server_id: u64, samples: *mut c_short, sample_count: c_int, channels: c_int, edited: *mut c_int,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let samples = slice::from_raw_parts_mut(samples, (sample_count * channels) as usize);
 	let mut send = (*edited & 2) != 0;
@@ -1268,15 +1269,15 @@ pub unsafe extern "C" fn ts3plugin_onEditCapturedVoiceDataEvent(
 	*edited |= plugin.captured_voice_data(api, &server, samples, channels, &mut send) as c_int;
 	// Set the second bit of `edited` to `send`
 	*edited = (*edited & !2) | ((send as c_int) << 1);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_onPluginCommandEvent(
 	server_id: u64, plugin_name: *const c_char, plugin_command: *const c_char, invoker_id: u16,
 	invoker_name: *const c_char, invoker_uid: *const c_char,
-) {
+) { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let invoker = if invoker_id == 0 {
 		None
@@ -1302,12 +1303,12 @@ pub unsafe extern "C" fn ts3plugin_onPluginCommandEvent(
 		to_string!(plugin_command),
 		invoker.map(|i| crate::Invoker::new(server.clone(), i)).as_ref(),
 	);
-}
+}}
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[doc(hidden)]
-pub unsafe extern "C" fn ts3plugin_processCommand(server_id: u64, command: *const c_char) -> c_int {
+pub unsafe extern "C" fn ts3plugin_processCommand(server_id: u64, command: *const c_char) -> c_int { unsafe {
 	let server_id = crate::ServerId(server_id);
 	let mut data = DATA.lock().unwrap();
 	let data = data.0.as_mut().unwrap();
@@ -1315,4 +1316,4 @@ pub unsafe extern "C" fn ts3plugin_processCommand(server_id: u64, command: *cons
 	let plugin = &mut data.1;
 	let server = api.get_server_unwrap(server_id);
 	if plugin.process_command(api, &server, to_string!(command)) { 0 } else { 1 }
-}
+}}

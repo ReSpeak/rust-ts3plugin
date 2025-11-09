@@ -431,7 +431,7 @@ lazy_static! {
 macro_rules! create_plugin {
 	($typename: ident) => {
 		/// Initialise the plugin and return the error status.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub unsafe extern "C" fn ts3plugin_init() -> std::os::raw::c_int {
 			match $crate::ts3interface::private_init::<$typename>() {
@@ -444,7 +444,7 @@ macro_rules! create_plugin {
 		/// Unique name identifying this plugin.
 		/// The result of this function has to be a null-terminated static string.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_name() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -465,7 +465,7 @@ macro_rules! create_plugin {
 
 		/// The version of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_version() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -486,7 +486,7 @@ macro_rules! create_plugin {
 
 		/// The author of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_author() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -507,7 +507,7 @@ macro_rules! create_plugin {
 
 		/// The desription of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_description() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -529,7 +529,7 @@ macro_rules! create_plugin {
 		/// If the plugin offers the possibility to be configured by the user.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_commandKeyword() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -551,7 +551,7 @@ macro_rules! create_plugin {
 		/// If the plugin offers the possibility to be configured by the user.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_offersConfigure() -> std::os::raw::c_int {
 			$typename::configurable() as std::os::raw::c_int
@@ -560,7 +560,7 @@ macro_rules! create_plugin {
 		/// If the plugin should be loaded automatically.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_requestAutoload() -> std::os::raw::c_int {
 			if $typename::autoload() { 1 } else { 0 }
