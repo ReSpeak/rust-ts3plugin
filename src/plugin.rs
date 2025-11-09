@@ -85,6 +85,9 @@ pub trait Plugin: 'static + Send {
 		&mut self, api: &::TsApi, server: &::Server, status: ::ConnectStatus, error: ::Error,
 	) {
 	}
+	
+	/// Callback for when the settings menu in TS3 is pressed
+	fn configure(&mut self, api: &::TsApi) {}
 
 	/// Called if a server is stopped. The server sends also a stop message.
 	fn server_stop(&mut self, api: &::TsApi, server: &::Server, message: String) {}

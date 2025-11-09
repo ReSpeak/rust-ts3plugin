@@ -89,6 +89,22 @@ pub unsafe extern "C" fn ts3plugin_shutdown() {
 	*data = (None, None);
 }
 
+/// Called when settings is opened and QtThread or NewThread is set as configurable offer.
+/// https://github.com/teamspeak/ts3client-pluginsdk/blob/4aa90a53aa150cbf81e13bc97e68c0431b26499f/src/plugin.h#L32
+#[allow(non_snake_case)]
+#[no_mangle]
+#[doc(hidden)]
+pub extern "C" fn ts3plugin_configure(handle: *mut std::os::raw::c_void, qParentWidget: *mut std::os::raw::c_void) {
+	// !TODO
+	// The handle parameter and qParentWidget parameter is not really needed to show a settings window using egui or whatever framework is chosen.
+	// Maybe expose the pointers anyway later if needed.
+	let mut data = DATA.lock().unwrap();
+	let data = data.0.as_mut().unwrap();
+	let api = &mut data.0;
+	let plugin = &mut data.1;
+	plugin.configure(api);
+}
+
 #[allow(non_snake_case)]
 #[no_mangle]
 #[doc(hidden)]
