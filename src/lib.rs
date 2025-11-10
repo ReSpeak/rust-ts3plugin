@@ -84,7 +84,7 @@ use std::fmt;
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_int};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, RwLock};
 
 /// Converts a normal `String` to a `CString`.
 macro_rules! to_cstring {
@@ -112,7 +112,7 @@ include!(concat!(env!("OUT_DIR"), "/server.rs"));
 /// This is not part of the official api and is only public to permit dirty
 /// hacks!
 #[doc(hidden)]
-pub static TS3_FUNCTIONS: Mutex<Option<Ts3Functions>> = Mutex::new(None);
+pub static TS3_FUNCTIONS: RwLock<Option<Ts3Functions>> = RwLock::new(None);
 
 // ******************** Structs ********************
 /// The possible receivers of a message. A message can be sent to a specific
@@ -260,7 +260,7 @@ impl ServerData {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error =
 				transmute((TS3_FUNCTIONS
-					.lock()
+					.read()
 					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
@@ -278,7 +278,7 @@ impl ServerData {
 			let mut number: c_int = 0;
 			let res: Error =
 				transmute((TS3_FUNCTIONS
-					.lock()
+					.read()
 					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
@@ -297,7 +297,7 @@ impl ServerData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -317,7 +317,7 @@ impl ServerData {
 		unsafe {
 			let mut number: u16 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -338,7 +338,7 @@ impl ServerData {
 		let mut result: *mut u16 = std::ptr::null_mut();
 		let res: Error = unsafe {
 			transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -368,7 +368,7 @@ impl ServerData {
 		let mut result: *mut u64 = std::ptr::null_mut();
 		let res: Error = unsafe {
 			transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -561,7 +561,7 @@ impl<'a> Server<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -584,7 +584,7 @@ impl<'a> Server<'a> {
 	pub fn send_plugin_message<S: AsRef<str>>(&self, message: S) {
 		let text = to_cstring!(message.as_ref());
 		(TS3_FUNCTIONS
-			.lock()
+			.read()
 			.unwrap()
 			.as_ref()
 			.expect("Functions should be loaded")
@@ -602,7 +602,7 @@ impl<'a> Server<'a> {
 	/// visible in the window of this client and will not be sent to the server.
 	pub fn print_message<S: AsRef<str>>(&self, message: S, target: MessageTarget) {
 		let text = to_cstring!(message.as_ref());
-		(TS3_FUNCTIONS.lock().unwrap().as_ref().expect("Functions should be loaded").print_message)(
+		(TS3_FUNCTIONS.read().unwrap().as_ref().expect("Functions should be loaded").print_message)(
 			self.get_id().0,
 			text.as_ptr(),
 			target,
@@ -644,7 +644,7 @@ impl ChannelData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -665,7 +665,7 @@ impl ChannelData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -686,7 +686,7 @@ impl ChannelData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -706,7 +706,7 @@ impl ChannelData {
 			let mut number: u64 = 0;
 			let res: Error =
 				transmute((TS3_FUNCTIONS
-					.lock()
+					.read()
 					.unwrap()
 					.as_ref()
 					.expect("Functions should be loaded")
@@ -765,7 +765,7 @@ impl<'a> Channel<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -817,7 +817,7 @@ impl ConnectionData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -838,7 +838,7 @@ impl ConnectionData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -859,7 +859,7 @@ impl ConnectionData {
 		unsafe {
 			let mut number: f64 = 0.0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -880,7 +880,7 @@ impl ConnectionData {
 		unsafe {
 			let mut name: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -901,7 +901,7 @@ impl ConnectionData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -920,7 +920,7 @@ impl ConnectionData {
 		unsafe {
 			let mut number: u64 = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -938,7 +938,7 @@ impl ConnectionData {
 		unsafe {
 			let mut number: c_int = 0;
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1016,7 +1016,7 @@ impl<'a> Connection<'a> {
 		unsafe {
 			let text = to_cstring!(message.as_ref());
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1088,7 +1088,7 @@ impl TsApi {
 		let mut result: *mut u64 = std::ptr::null_mut();
 		let res: Error = unsafe {
 			transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1102,7 +1102,7 @@ impl TsApi {
 					// We get open tabs, even if they are disconnected.
 					let mut status: c_int = 0;
 					let res: Error = transmute((TS3_FUNCTIONS
-						.lock()
+						.read()
 						.unwrap()
 						.as_ref()
 						.expect("Functions should be loaded")
@@ -1141,7 +1141,7 @@ impl TsApi {
 	) -> Result<(), Error> {
 		unsafe {
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1179,7 +1179,7 @@ impl TsApi {
 		unsafe {
 			let mut message: *mut c_char = std::ptr::null_mut();
 			let res: Error = transmute((TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1310,7 +1310,7 @@ impl TsApi {
 	pub fn print_message<S: AsRef<str>>(&self, message: S) {
 		let text = to_cstring!(message.as_ref());
 		(TS3_FUNCTIONS
-			.lock()
+			.read()
 			.unwrap()
 			.as_ref()
 			.expect("Functions should be loaded")
@@ -1321,7 +1321,7 @@ impl TsApi {
 	pub fn get_app_path(&self) -> String {
 		TsApi::get_path(|p, l| {
 			(TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1333,7 +1333,7 @@ impl TsApi {
 	pub fn get_resources_path(&self) -> String {
 		TsApi::get_path(|p, l| {
 			(TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1346,7 +1346,7 @@ impl TsApi {
 	pub fn get_config_path(&self) -> String {
 		TsApi::get_path(|p, l| {
 			(TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
@@ -1358,7 +1358,7 @@ impl TsApi {
 	pub fn get_plugin_path(&self) -> String {
 		TsApi::get_path(|p, l| {
 			(TS3_FUNCTIONS
-				.lock()
+				.read()
 				.unwrap()
 				.as_ref()
 				.expect("Functions should be loaded")
