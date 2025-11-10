@@ -72,8 +72,7 @@ pub extern "C" fn ts3plugin_apiVersion() -> c_int { 26 }
 #[unsafe(no_mangle)]
 #[doc(hidden)]
 pub unsafe extern "C" fn ts3plugin_setFunctionPointers(funs: Ts3Functions) {
-	let local = &crate::TS3_FUNCTIONS;
-	local.lock().unwrap().replace(funs);
+	crate::TS3_FUNCTIONS.write().unwrap().replace(funs);
 }
 
 /// Called when the plugin should be unloaded.
