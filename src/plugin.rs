@@ -85,7 +85,7 @@ pub trait Plugin: 'static + Send {
 		&mut self, api: &crate::TsApi, server: &crate::Server, status: crate::ConnectStatus, error: crate::Error,
 	) {
 	}
-	
+
 	/// Callback for when the settings menu in TS3 is pressed
 	fn configure(&mut self, api: &crate::TsApi) {}
 

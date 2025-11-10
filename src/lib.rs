@@ -549,12 +549,12 @@ impl<'a> Server<'a> {
 	}
 
 	pub fn get_server_group(&self, _server_group_id: ServerGroupId) -> Option<ServerGroup> {
-		//todo!()
+		// TODO
 		Some(ServerGroup {})
 	}
 
 	pub fn get_channel_group(&self, _channel_group_id: ChannelGroupId) -> Option<ChannelGroup> {
-		//todo!()
+		// TODO
 		Some(ChannelGroup {})
 	}
 
@@ -1309,7 +1309,8 @@ impl TsApi {
 	}
 
 	pub fn get_permission(&self, _permission_id: PermissionId) -> Option<&Permission> {
-		todo!()
+		// TODO
+		Some(&Permission {})
 	}
 
 	/// Print a message to the currently selected tab. This is only
