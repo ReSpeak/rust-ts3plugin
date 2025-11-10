@@ -1,6 +1,6 @@
 [package]
 name = "ts3plugin"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Flakebi <flakebi@t-online.de>"]
 description = """
 An abstraction layer that simplifies creating TeamSpeak3 plugins
@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["plugin", "TeamSpeak3", "TS3"]
 categories = ["api-bindings"]
 license = "MIT/Apache-2.0"
-edition = "2015"
+edition = "2024"
 build = "build/build.rs"
 
 [lib]
@@ -30,4 +30,4 @@ ts3plugin-sys = "0.5"
 [build-dependencies]
 anyhow = "1"
 serde = "1"
-tera = "1"
+tera = "1.20.1"

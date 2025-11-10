@@ -81,8 +81,7 @@ impl<'a> Property<'a> {
 			result_type.push_str(self.type_s.as_ref());
 		}
 		if self.result {
-			result_type.push_str(", ");
-			result_type.push_str("::Error>");
+			result_type.push_str(", Error>");
 		}
 		result_type
 	}
@@ -130,7 +129,7 @@ impl<'a> Property<'a> {
 
 	fn create_initialisation(&self) -> String {
 		if self.result {
-			String::from("Err(::Error::Ok)")
+			String::from("Err(Error::Ok)")
 		} else {
 			self.intern_create_initialisation(self.default_args.as_ref(), false)
 		}
@@ -770,7 +769,7 @@ fn main() -> Result<()> {
 		}
 	});
 	tera.register_filter("title", |value: &tera::Value, _: &_| {
-		if let tera::Value::String(ref s) = value {
+		if let tera::Value::String(s) = value {
 			Ok(tera::Value::String(to_pascal_case(s)))
 		} else {
 			Err("title expects a string to filter".into())

@@ -59,9 +59,9 @@ pub trait Plugin: 'static + Send {
 	/// [`ConfigureOffer::No`].
 	///
 	/// [`ConfigureOffer::No`]: ../ts3plugin_sys/plugin_definitions/enum.ConfigureOffer.html
-	fn configurable() -> ::ConfigureOffer
+	fn configurable() -> crate::ConfigureOffer
 	where Self: Sized {
-		::ConfigureOffer::No
+		crate::ConfigureOffer::No
 	}
 	/// If the plugin should be loaded by default or only if activated manually,
 	/// defaults to `false`.
@@ -72,7 +72,7 @@ pub trait Plugin: 'static + Send {
 
 	// *************************** Required methods ****************************
 	/// Called when the plugin is loaded by TeamSpeak.
-	fn new(api: &::TsApi) -> Result<Box<Self>, InitError>
+	fn new(api: &crate::TsApi) -> Result<Box<Self>, InitError>
 	where Self: Sized;
 
 	// *************************** Optional methods ****************************
@@ -82,34 +82,37 @@ pub trait Plugin: 'static + Send {
 	///
 	/// [`TsApi`]: ../struct.TsApi.html
 	fn connect_status_change(
-		&mut self, api: &::TsApi, server: &::Server, status: ::ConnectStatus, error: ::Error,
+		&mut self, api: &crate::TsApi, server: &crate::Server, status: crate::ConnectStatus, error: crate::Error,
 	) {
 	}
+	
+	/// Callback for when the settings menu in TS3 is pressed
+	fn configure(&mut self, api: &crate::TsApi) {}
 
 	/// Called if a server is stopped. The server sends also a stop message.
-	fn server_stop(&mut self, api: &::TsApi, server: &::Server, message: String) {}
+	fn server_stop(&mut self, api: &crate::TsApi, server: &crate::Server, message: String) {}
 
 	/// Called if a server error occurs.
 	/// Return `false` if the TeamSpeak client should handle the error normally or
 	/// `true` if the client should ignore the error.
 	fn server_error(
-		&mut self, api: &::TsApi, server: &::Server, error: ::Error, message: String,
+		&mut self, api: &crate::TsApi, server: &crate::Server, error: crate::Error, message: String,
 		return_code: String, extra_message: String,
 	) -> bool {
 		false
 	}
 
 	/// Called if someone edited the server.
-	fn server_edited(&mut self, api: &::TsApi, server: &::Server, invoker: Option<&::Invoker>) {}
+	fn server_edited(&mut self, api: &crate::TsApi, server: &crate::Server, invoker: Option<&crate::Invoker>) {}
 
 	/// Called when the user requests the server info by middle-clicking on the server.
-	fn server_connection_info(&mut self, api: &::TsApi, server: &::Server) {}
+	fn server_connection_info(&mut self, api: &crate::TsApi, server: &crate::Server) {}
 
-	fn connection_info(&mut self, api: &::TsApi, server: &::Server, connection: &::Connection) {}
+	fn connection_info(&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection) {}
 
 	fn connection_properties_changed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		old_connection: &::Connection, changes: ::ConnectionChanges, invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		old_connection: &crate::Connection, changes: crate::ConnectionChanges, invoker: &crate::Invoker,
 	) {
 	}
 
@@ -117,84 +120,84 @@ pub trait Plugin: 'static + Send {
 	/// was previously not known to the plugin, if appeared is false, the connection left
 	/// the view of connection.
 	fn connection_announced(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection, appeared: bool,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection, appeared: bool,
 	) {
 	}
 
 	/// Called, if a connection connects to the server. This is also called for our own
 	/// connection.
 	fn connection_changed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection, connected: bool,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection, connected: bool,
 		message: String,
 	) {
 	}
 
 	/// Called if a connection switched the channel.
 	fn connection_move(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		old_channel: &::Channel, new_channel: &::Channel, visibility: ::Visibility,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		old_channel: &crate::Channel, new_channel: &crate::Channel, visibility: crate::Visibility,
 	) {
 	}
 
 	/// Called if a connection was moved by another connection.
 	fn connection_moved(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		old_channel: &::Channel, new_channel: &::Channel, visibility: ::Visibility,
-		invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		old_channel: &crate::Channel, new_channel: &crate::Channel, visibility: crate::Visibility,
+		invoker: &crate::Invoker,
 	) {
 	}
 
 	/// Called when a connection times out.
-	fn connection_timeout(&mut self, api: &::TsApi, server: &::Server, connection: &::Connection) {}
+	fn connection_timeout(&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection) {}
 
 	/// Called if a channel is announced to the client.
 	/// This will be called for each channel when connecting to a server.
-	fn channel_announced(&mut self, api: &::TsApi, server: &::Server, channel: &::Channel) {}
+	fn channel_announced(&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel) {}
 
 	/// Called if the channel description was changed.
 	fn channel_description_updated(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel,
 	) {
 	}
 
 	/// Called if the channel data are updated and available.
 	/// This happens e.g. when the user clicked on the channel for the first time.
 	fn channel_updated(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel, old_channel: &::Channel,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel, old_channel: &crate::Channel,
 	) {
 	}
 
 	/// Called if a channel was created.
 	/// The invoker is `None` if the server created the channel.
 	fn channel_created(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel,
-		invoker: Option<&::Invoker>,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel,
+		invoker: Option<&crate::Invoker>,
 	) {
 	}
 
 	/// Called if a channel was deleted.
 	/// The invoker is `None` if the server deleted the channel.
 	fn channel_deleted(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel,
-		invoker: Option<&::Invoker>,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel,
+		invoker: Option<&crate::Invoker>,
 	) {
 	}
 
 	/// Called if a channel was edited.
 	fn channel_edited(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel, old_channel: &::Channel,
-		invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel, old_channel: &crate::Channel,
+		invoker: &crate::Invoker,
 	) {
 	}
 
 	/// Called if the channel password was updated.
-	fn channel_password_updated(&mut self, api: &::TsApi, server: &::Server, channel: &::Channel) {}
+	fn channel_password_updated(&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel) {}
 
 	/// The current parent id of the channel is the old one, the new
 	/// parent id is given as a parameter.
 	fn channel_moved(
-		&mut self, api: &::TsApi, server: &::Server, channel: &::Channel,
-		new_parent_channel: &::Channel, invoker: Option<&::Invoker>,
+		&mut self, api: &crate::TsApi, server: &crate::Server, channel: &crate::Channel,
+		new_parent_channel: &crate::Channel, invoker: Option<&crate::Invoker>,
 	) {
 	}
 
@@ -203,8 +206,8 @@ pub trait Plugin: 'static + Send {
 	/// Return `false` if the TeamSpeak client should handle the message normally or
 	/// `true` if the client should ignore the message.
 	fn message(
-		&mut self, api: &::TsApi, server: &::Server, invoker: &::Invoker,
-		target: ::MessageReceiver, message: String, ignored: bool,
+		&mut self, api: &crate::TsApi, server: &crate::Server, invoker: &crate::Invoker,
+		target: crate::MessageReceiver, message: String, ignored: bool,
 	) -> bool {
 		false
 	}
@@ -214,36 +217,36 @@ pub trait Plugin: 'static + Send {
 	/// Return `false` if the TeamSpeak client should handle the poke normally or
 	/// `true` if the client should ignore the poke.
 	fn poke(
-		&mut self, api: &::TsApi, server: &::Server, invoker: &::Invoker, message: String,
+		&mut self, api: &crate::TsApi, server: &crate::Server, invoker: &crate::Invoker, message: String,
 		ignored: bool,
 	) -> bool {
 		false
 	}
 
 	fn channel_kick(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		old_channel: &::Channel, new_channel: &::Channel, visibility: ::Visibility,
-		invoker: &::Invoker, message: String,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		old_channel: &crate::Channel, new_channel: &crate::Channel, visibility: crate::Visibility,
+		invoker: &crate::Invoker, message: String,
 	) {
 	}
 
 	fn server_kick(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		invoker: &::Invoker, message: String,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		invoker: &crate::Invoker, message: String,
 	) {
 	}
 
 	fn server_ban(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		invoker: &::Invoker, message: String, time: u64,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		invoker: &crate::Invoker, message: String, time: u64,
 	) {
 	}
 
 	/// The old values of `talking` and `whispering` are available from the connection.
 	/// They will be updated after this functions returned.
 	fn talking_changed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		talking: ::TalkStatus, whispering: bool,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		talking: crate::TalkStatus, whispering: bool,
 	) {
 	}
 
@@ -252,29 +255,29 @@ pub trait Plugin: 'static + Send {
 	/// The avatar information are only fetched if requested, e.g. if the
 	/// user clicks on a connection.
 	fn avatar_changed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
 		path: Option<String>,
 	) {
 	}
 
 	/// Called if a channel group is assigned to a connection.
 	fn connection_channel_group_changed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		channel_group: &::ChannelGroup, channel: &::Channel, invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		channel_group: &crate::ChannelGroup, channel: &crate::Channel, invoker: &crate::Invoker,
 	) {
 	}
 
 	/// Called if a server group is added to a connection.
 	fn connection_server_group_added(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Invoker,
-		server_group: &::ServerGroup, invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Invoker,
+		server_group: &crate::ServerGroup, invoker: &crate::Invoker,
 	) {
 	}
 
 	/// Called if a server group is removed from a connection.
 	fn connection_server_group_removed(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Invoker,
-		server_group: &::ServerGroup, invoker: &::Invoker,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Invoker,
+		server_group: &crate::ServerGroup, invoker: &crate::Invoker,
 	) {
 	}
 
@@ -293,7 +296,7 @@ pub trait Plugin: 'static + Send {
 	/// The callbacks with audio data are called from another thread than the
 	/// other functions.
 	fn playback_voice_data(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
 		samples: &mut [i16], channels: i32,
 	) {
 	}
@@ -311,8 +314,8 @@ pub trait Plugin: 'static + Send {
 	/// The callbacks with audio data are called from another thread than the
 	/// other functions.
 	fn post_process_voice_data(
-		&mut self, api: &::TsApi, server: &::Server, connection: &::Connection,
-		samples: &mut [i16], channels: i32, channel_speaker_array: &[::Speaker],
+		&mut self, api: &crate::TsApi, server: &crate::Server, connection: &crate::Connection,
+		samples: &mut [i16], channels: i32, channel_speaker_array: &[crate::Speaker],
 		channel_fill_mask: &mut u32,
 	) {
 	}
@@ -329,8 +332,8 @@ pub trait Plugin: 'static + Send {
 	/// The callbacks with audio data are called from another thread than the
 	/// other functions.
 	fn mixed_playback_voice_data(
-		&mut self, api: &::TsApi, server: &::Server, samples: &mut [i16], channels: i32,
-		channel_speaker_array: &[::Speaker], channel_fill_mask: &mut u32,
+		&mut self, api: &crate::TsApi, server: &crate::Server, samples: &mut [i16], channels: i32,
+		channel_speaker_array: &[crate::Speaker], channel_fill_mask: &mut u32,
 	) {
 	}
 
@@ -343,7 +346,7 @@ pub trait Plugin: 'static + Send {
 	/// The callbacks with audio data are called from another thread than the
 	/// other functions.
 	fn captured_voice_data(
-		&mut self, api: &::TsApi, server: &::Server, samples: &mut [i16], channels: i32,
+		&mut self, api: &crate::TsApi, server: &crate::Server, samples: &mut [i16], channels: i32,
 		send: &mut bool,
 	) -> bool {
 		false
@@ -352,7 +355,7 @@ pub trait Plugin: 'static + Send {
 	/// Return `false` if the TeamSpeak client should handle the error normally or
 	/// `true` if the client should ignore the error.
 	fn permission_error(
-		&mut self, api: &::TsApi, server: &::Server, permission: &::Permission, error: ::Error,
+		&mut self, api: &crate::TsApi, server: &crate::Server, permission: &crate::Permission, error: crate::Error,
 		message: String, return_code: String,
 	) -> bool {
 		false
@@ -365,8 +368,8 @@ pub trait Plugin: 'static + Send {
 	///
 	/// [`Server::send_plugin_message`]: ../struct.Server.html#method.send_plugin_message
 	fn plugin_message(
-		&mut self, api: &::TsApi, server: &::Server, plugin: String, message: String,
-		invoker: Option<&::Invoker>,
+		&mut self, api: &crate::TsApi, server: &crate::Server, plugin: String, message: String,
+		invoker: Option<&crate::Invoker>,
 	) {
 	}
 
@@ -379,13 +382,13 @@ pub trait Plugin: 'static + Send {
 	/// Return `true` if this function handled the command or `false` if not.
 	///
 	/// [`Plugin::command`]: #method.command
-	fn process_command(&mut self, api: &::TsApi, server: &::Server, command: String) -> bool {
+	fn process_command(&mut self, api: &crate::TsApi, server: &crate::Server, command: String) -> bool {
 		false
 	}
 
 	/// Called if the plugin is getting disabled (either by the user or if
 	/// TeamSpeak is exiting).
-	fn shutdown(&mut self, api: &::TsApi) {}
+	fn shutdown(&mut self, api: &crate::TsApi) {}
 }
 
 /// Save the `CString`s that are returned from the TeamSpeak API.
@@ -428,7 +431,7 @@ lazy_static! {
 macro_rules! create_plugin {
 	($typename: ident) => {
 		/// Initialise the plugin and return the error status.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub unsafe extern "C" fn ts3plugin_init() -> std::os::raw::c_int {
 			match $crate::ts3interface::private_init::<$typename>() {
@@ -441,7 +444,7 @@ macro_rules! create_plugin {
 		/// Unique name identifying this plugin.
 		/// The result of this function has to be a null-terminated static string.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_name() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -462,7 +465,7 @@ macro_rules! create_plugin {
 
 		/// The version of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_version() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -483,7 +486,7 @@ macro_rules! create_plugin {
 
 		/// The author of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_author() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -504,7 +507,7 @@ macro_rules! create_plugin {
 
 		/// The desription of the plugin.
 		/// Can be called before init.
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_description() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -526,7 +529,7 @@ macro_rules! create_plugin {
 		/// If the plugin offers the possibility to be configured by the user.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_commandKeyword() -> *const std::os::raw::c_char {
 			let mut data = CREATE_PLUGIN_DATA.lock().unwrap();
@@ -548,7 +551,7 @@ macro_rules! create_plugin {
 		/// If the plugin offers the possibility to be configured by the user.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_offersConfigure() -> std::os::raw::c_int {
 			$typename::configurable() as std::os::raw::c_int
@@ -557,7 +560,7 @@ macro_rules! create_plugin {
 		/// If the plugin should be loaded automatically.
 		/// Can be called before init.
 		#[allow(non_snake_case)]
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		#[doc(hidden)]
 		pub extern "C" fn ts3plugin_requestAutoload() -> std::os::raw::c_int {
 			if $typename::autoload() { 1 } else { 0 }

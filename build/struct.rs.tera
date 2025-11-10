@@ -8,7 +8,7 @@
 pub {% endif %}struct {{ s.name }} {
 {% for prop in s.properties %}
 	{{ prop.name }}: {% if prop.result %}
-Result<{{ prop.type_s }}, ::Error>{% else %}
+Result<{{ prop.type_s }}, Error>{% else %}
 {{ prop.type_s }}{% endif %},
 {% endfor %}
 
@@ -93,7 +93,7 @@ impl<'a> {{ s.api_name }}<'a> {
 {% endfor %}
 {% if s.do_properties %}
 
-	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property> {
+	pub {% else %}	{% endif %}fn properties(&self) -> Vec<{{ s.api_name }}Property<'_>> {
 		let mut v = vec![
 			{% for prop in s.properties %}
 			{% if prop.result and prop.api_getter %}
