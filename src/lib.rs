@@ -590,7 +590,7 @@ impl<'a> Server<'a> {
 			.expect("Functions should be loaded")
 			.send_plugin_command)(
 			self.get_id().0,
-			to_cstring!(self.api.get_plugin_path()).as_ptr(),
+			to_cstring!(self.api.get_plugin_id()).as_ptr(),
 			text.as_ptr(),
 			PluginTargetMode::Server as i32,
 			std::ptr::null(),
@@ -1205,6 +1205,11 @@ impl TsApi {
 	/// Returns true if a server was removed
 	fn remove_server(&mut self, server_id: ServerId) -> Option<ServerData> {
 		self.servers.remove(&server_id)
+	}
+
+	/// Get the plugin id assigned by TeamSpeak.
+	pub fn get_plugin_id(&self) -> &str {
+		&self.plugin_id
 	}
 
 	/// Update the data of a connection with the data from the same connection
