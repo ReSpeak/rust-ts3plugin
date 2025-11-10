@@ -518,11 +518,13 @@ impl<'a> Server<'a> {
 	}
 
 	pub fn get_server_group(&self, _server_group_id: ServerGroupId) -> Option<ServerGroup> {
-		todo!()
+		//todo!()
+		Some(ServerGroup {})
 	}
 
 	pub fn get_channel_group(&self, _channel_group_id: ChannelGroupId) -> Option<ChannelGroup> {
-		todo!()
+		//todo!()
+		Some(ChannelGroup {})
 	}
 
 	/// Send a message to the server chat.
